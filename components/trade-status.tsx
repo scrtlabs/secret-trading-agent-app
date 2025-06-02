@@ -6,9 +6,9 @@ import { TrendingUp, Clock, CheckCircle } from "lucide-react"
 import { useAppStore } from "@/lib/store"
 
 export function TradeStatus() {
-  const { trade, wallet } = useAppStore()
+  const { trade, wallet, user } = useAppStore()
 
-  if (!wallet.isConnected) {
+  if (!wallet.isConnected || !user) {
     return (
       <Card className="opacity-50">
         <CardHeader>
@@ -24,7 +24,7 @@ export function TradeStatus() {
       </Card>
     )
   }
-
+  const isAllowedToSpend = user.allowed_to_spend_sscrt === 'true' && user.allowed_to_spend_susdc === 'true';
   return (
     <Card>
       <CardHeader>
@@ -37,8 +37,8 @@ export function TradeStatus() {
       <CardContent className="space-y-3">
         <div className="flex items-center justify-between">
           <span>Agent Status:</span>
-          <Badge variant={trade.isConvinced ? "default" : "secondary"}>
-            {trade.isConvinced ? "Convinced" : "Not Convinced"}
+          <Badge variant={isAllowedToSpend ? "default" : "secondary"}>
+            {isAllowedToSpend ? "Authorized to spend" : "Not Authorized to spend"}
           </Badge>
         </div>
 

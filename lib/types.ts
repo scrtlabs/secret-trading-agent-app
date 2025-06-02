@@ -1,4 +1,4 @@
-import { OfflineAminoSigner, ChainInfo } from "@keplr-wallet/types"
+import { OfflineAminoSigner, ChainInfo } from "@keplr-wallet/types";
 
 export interface BalanceResponse {
   balance: {
@@ -6,46 +6,43 @@ export interface BalanceResponse {
   };
 }
 export interface ChatMessage {
-  id: string
-  content: string
-  role: "user" | "assistant"
-  timestamp: Date
+  content: string;
+  role: "user" | "assistant";
 }
 
 export interface Balance {
-  sSCRT: string
-  sUSDC: string
-  nobleUSDC: string
+  sSCRT: string;
+  sUSDC: string;
 }
 
 export interface WalletState {
-  isConnected: boolean
-  secretAddress?: string
-  nobleAddress?: string
-  secretSigner?: OfflineAminoSigner
-  nobleSigner?: OfflineAminoSigner
-  secretChain?: ChainInfo
-  nobleChain?: ChainInfo
+  isConnected: boolean;
+  secretAddress?: string;
+  secretSigner?: OfflineAminoSigner;
+  secretChain?: ChainInfo;
 }
 
 export interface TradeState {
-  isConvinced: boolean
-  isTrading: boolean
-  lastTradeResult?: string
+  isConvinced: boolean;
+  isTrading: boolean;
+  lastTradeResult?: string;
 }
 
-export type ViewingKeys = Keys | null
+export type ViewingKeys = Keys | null;
 
 export interface Keys {
-  sSCRT: string
-  sUSDC: string
+  sSCRT: string;
+  sUSDC: string;
 }
 
 export interface AppState {
-  wallet: WalletState
-  balances: Balance
-  viewingKeys: ViewingKeys
-  messages: ChatMessage[]
-  trade: TradeState
-  isLoading: boolean
+  user: User | null;
+  token: string | null;
+  agentAddress: string | null;
+  wallet: WalletState;
+  balances: Balance;
+  viewingKeys: ViewingKeys;
+  messages: ChatMessage[];
+  trade: TradeState;
+  isLoading: boolean;
 }

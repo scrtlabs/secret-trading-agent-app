@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Card,
   CardContent,
@@ -10,13 +9,20 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Wallet, WalletIcon as WalletX } from "lucide-react";
+import { Wallet, WalletIcon as WalletX, Handshake } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { truncateAddress } from "@/lib/utils";
 
 export function ConnectWalletSection() {
-  const { wallet, isLoading, connectWallet, disconnectWallet, getAutoConnect } =
-    useAppStore();
+  const {
+    wallet,
+    isLoading,
+    connectWallet,
+    disconnectWallet,
+    getAutoConnect,
+    authorizeSpend,
+    user,
+  } = useAppStore();
 
   useEffect(() => {
     if (getAutoConnect()) {
@@ -36,7 +42,10 @@ export function ConnectWalletSection() {
     disconnectWallet();
   };
 
-  if (wallet.isConnected && wallet.secretAddress && wallet.nobleAddress) {
+  if (wallet.isConnected && wallet.secretAddress && user) {
+    const isAllowedToSpend =
+      user.allowed_to_spend_sscrt === "true" &&
+      user.allowed_to_spend_susdc === "true";
     return (
       <Card>
         <CardHeader>
@@ -46,11 +55,19 @@ export function ConnectWalletSection() {
           </CardTitle>
           <CardDescription>
             Secret Address: {truncateAddress(wallet.secretAddress)}
-            <br />
-            Noble Address: {truncateAddress(wallet.nobleAddress)}
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          {!isAllowedToSpend && (
+            <Button
+              onClick={authorizeSpend}
+              variant="default"
+              className="w-full"
+            >
+              <Handshake className="h-4 w-4 mr-2" />
+              Authorize Spending
+            </Button>
+          )}
           <Button
             onClick={handleDisconnect}
             variant="outline"

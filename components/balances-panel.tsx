@@ -73,10 +73,6 @@ export function BalancesPanel() {
               <span>sUSDC:</span>
               <span className="text-muted-foreground">--</span>
             </div>
-            <div className="flex justify-between">
-              <span>USDC(Noble):</span>
-              <span className="text-muted-foreground">--</span>
-            </div>
           </div>
         </CardContent>
       </Card>
@@ -123,10 +119,6 @@ export function BalancesPanel() {
                 <span className="font-medium">sUSDC</span>
                 <span className="text-lg font-bold">{balances.sUSDC}</span>
               </div>
-              <div className="flex justify-between items-center p-3 bg-muted rounded-lg">
-                <span className="font-medium">USDC(Noble)</span>
-                <span className="text-lg font-bold">{balances.nobleUSDC}</span>
-              </div>
             </div>
           ) : (
             <div className="space-y-2">
@@ -136,10 +128,6 @@ export function BalancesPanel() {
               </div>
               <div className="flex justify-between">
                 <span>sUSDC:</span>
-                <span className="text-muted-foreground">--</span>
-              </div>
-              <div className="flex justify-between">
-                <span>USDC(Noble):</span>
                 <span className="text-muted-foreground">--</span>
               </div>
             </div>
