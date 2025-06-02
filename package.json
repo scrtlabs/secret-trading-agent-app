@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "postinstall": "npm rebuild sqlite3 --build-from-source",
     "start": "next start",
     "lint": "next lint"
   },
