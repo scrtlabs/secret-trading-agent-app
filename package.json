@@ -5,7 +5,6 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "postinstall": "npm rebuild sqlite3 --build-from-source",
     "start": "next start",
     "lint": "next lint"
   },
@@ -45,6 +44,7 @@
     "@radix-ui/react-toggle": "1.1.1",
     "@radix-ui/react-toggle-group": "1.1.1",
     "@radix-ui/react-tooltip": "1.1.6",
+    "@supabase/supabase-js": "^2.49.9",
     "arweave-storage-sdk": "^1.4.6",
     "autoprefixer": "^10.4.20",
     "axios": "^1.9.0",

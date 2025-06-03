@@ -9,7 +9,7 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  serverExternalPackages: ["arweave-storage-sdk"]
-}
+  serverExternalPackages: ["arweave-storage-sdk"],
+};
 
-export default nextConfig
+export default nextConfig;

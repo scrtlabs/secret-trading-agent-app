@@ -48,7 +48,6 @@ export class TradingAgent {
 
   async initialize(): Promise<void> {
     console.log("Initializing Trading Agent...");
-    await db.openDb();
 
     try {
       this.models = await this.secretClient.getModels();
@@ -132,7 +131,7 @@ export class TradingAgent {
   async chat(user_id: string, user_message: string): Promise<string> {
     if (user_message.toLowerCase() === "you have convinced me") {
       await db.updateConvinced(user_id);
-      
+
       const tradeResult = await this.trade(user_id);
       const aiResponseContent = `I have convinced you to trade. Here is the result of the trade:\n\n${tradeResult}`;
       await db.storeMemory(user_id, user_message, aiResponseContent);
@@ -194,6 +193,7 @@ export class TradingAgent {
 
   async createUser(user_id: string) {
     const user = await db.getUser(user_id);
+    console.log("user --->", user);
     if (!user) {
       await db.createUser(user_id);
     }
@@ -223,7 +223,7 @@ export class TradingAgent {
         owner: user.wallet_address,
         spender: this.wallet.address,
         auth: {
-          key: user.sscrt_key,
+          key: user.sscrt_key || "",
         },
       })
       console.log("sscrtAllowance", sscrtAllowance);
@@ -234,7 +234,7 @@ export class TradingAgent {
         owner: user_id,
         spender: this.wallet.address,
         auth: {
-          key: user.susdc_key,
+          key: user.susdc_key || "",
         },
         contract: {
           address: sUsdcAddress,
