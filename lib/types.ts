@@ -1,4 +1,5 @@
 import { OfflineAminoSigner, ChainInfo } from "@keplr-wallet/types";
+import { EncryptionUtils } from "secretjs";
 
 export interface BalanceResponse {
   balance: {
@@ -20,6 +21,7 @@ export interface WalletState {
   secretAddress?: string;
   secretSigner?: OfflineAminoSigner;
   secretChain?: ChainInfo;
+  enigmaUtils?: EncryptionUtils;
 }
 
 export interface TradeState {

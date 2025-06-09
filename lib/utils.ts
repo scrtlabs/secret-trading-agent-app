@@ -4,7 +4,7 @@ import { ChainInfo, OfflineAminoSigner } from "@keplr-wallet/types";
 import { chainRegistryChainToKeplr } from "@chain-registry/keplr";
 import { assets, chains } from "chain-registry";
 import { SigningStargateClient } from "@cosmjs/stargate";
-import { SecretNetworkClient } from "secretjs";
+import { SecretNetworkClient, EncryptionUtils } from "secretjs";
 import { BalanceResponse } from "./types";
 import { SECRET_CHAIN_ID } from "./constants";
 import { SECRET_LCD } from "./constants";
@@ -57,10 +57,13 @@ export const setupKeplr = async () => {
 
   const secretAddress = secretAccounts[0].address;
 
+  const enigmaUtils = window.keplr.getEnigmaUtils(secretChain.chain_id);
+
   return {
     secretAddress,
     secretSigner: keplrSecretOfflineSigner,
     secretChain: keplrSecretChain,
+    enigmaUtils
   };
 };
 
@@ -118,11 +121,13 @@ export const generateViewingKey = async () => {
 export const secretLCDClient = (
   secretAddress: string,
   secretSigner: OfflineAminoSigner,
+  enigmaUtils: EncryptionUtils
 ) => {
   return new SecretNetworkClient({
     url: SECRET_LCD,
     chainId: SECRET_CHAIN_ID,
     wallet: secretSigner,
     walletAddress: secretAddress,
+    encryptionUtils: enigmaUtils,
   });
 };

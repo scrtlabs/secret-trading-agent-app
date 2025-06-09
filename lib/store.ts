@@ -56,6 +56,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
     secretAddress: "",
     secretSigner: undefined,
     secretChain: undefined,
+    enigmaUtils: undefined
   },
   balances: {
     sSCRT: "0",
@@ -82,7 +83,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
         console.warn("Please install Keplr extension to continue.");
         return;
       }
-      const { secretAddress, secretSigner, secretChain } = await setupKeplr();
+      const { secretAddress, secretSigner, secretChain, enigmaUtils } = await setupKeplr();
 
       let existingToken = getAuthToken();
       const walletAddress = getWalletAddressFromToken();
@@ -106,6 +107,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
           secretAddress,
           secretSigner,
           secretChain,
+          enigmaUtils
         }
       }
       set(payload);
@@ -123,13 +125,13 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
   authorizeSpend: async () => {
     const { token, wallet, agentAddress } = get();
-    const { secretSigner, secretAddress } = wallet
+    const { secretSigner, secretAddress, enigmaUtils } = wallet
 
     if (!token || !wallet.isConnected || !secretSigner || !secretAddress || !agentAddress) {
       throw new Error("No token or wallet found");
     }
 
-    const lcdClient = secretLCDClient(secretAddress, secretSigner);
+    const lcdClient = secretLCDClient(secretAddress, secretSigner, enigmaUtils);
     await lcdClient.tx.snip20.increaseAllowance({
       sender: secretAddress,
       contract_address: SSCRT_ADDRESS,
@@ -177,6 +179,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
         secretAddress: "",
         secretSigner: undefined,
         secretChain: undefined,
+        enigmaUtils: undefined
       },
       balances: {
         sSCRT: "0",
@@ -277,13 +280,13 @@ export const useAppStore = create<AppStore>((set, get) => ({
     set({ isLoading: true });
     try {
       // Simulate API call
-      const { secretSigner, secretChain, secretAddress } = wallet;
+      const { secretSigner, secretChain, secretAddress, enigmaUtils } = wallet;
 
       if (!secretChain || !secretSigner || !secretAddress) {
         throw new Error("Wallet is not connected");
       }
 
-      const lcdClient = secretLCDClient(secretAddress, secretSigner);
+      const lcdClient = secretLCDClient(secretAddress, secretSigner, enigmaUtils);
 
       const sscrtCoinBalance = await getSnip20Balance(
         SSCRT_ADDRESS,
