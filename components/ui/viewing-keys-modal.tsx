@@ -12,9 +12,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Key, Shuffle, Eye, EyeOff } from "lucide-react";
+import { Key, Eye, EyeOff } from "lucide-react"; // The Shuffle icon is no longer needed
 import { useAppStore } from "@/lib/store";
-import type { Keys, ViewingKeys } from "@/lib/types";
+import type { Keys } from "@/lib/types";
+import { SSCRT_ADDRESS, SUSDC_ADDRESS } from "@/lib/constants";
 
 interface ViewingKeysModalProps {
   open: boolean;
@@ -25,7 +26,9 @@ export function ViewingKeysModal({
   open,
   onOpenChange,
 }: ViewingKeysModalProps) {
-  const { setViewingKeys, viewingKeys } = useAppStore();
+  // Get the create function and the global isLoading state from the store
+  const { setViewingKeys, viewingKeys, createViewingKey, isLoading } = useAppStore();
+  
   const [keys, setKeys] = useState<Keys>({
     sSCRT: viewingKeys?.sSCRT || "",
     sUSDC: viewingKeys?.sUSDC || "",
@@ -33,20 +36,14 @@ export function ViewingKeysModal({
   const [showSSCRT, setShowSSCRT] = useState(false);
   const [showSUSDC, setShowSUSDC] = useState(false);
 
-  const generateViewingKeys = () => {
-    // Generate mock viewing keys
-    const generateKey = () => {
-      return Array.from({ length: 32 }, () =>
-        Math.floor(Math.random() * 256)
-          .toString(16)
-          .padStart(2, "0")
-      ).join("");
-    };
-
-    setKeys({
-      sSCRT: generateKey(),
-      sUSDC: generateKey(),
-    });
+  // This function calls the store to create a real viewing key on-chain
+  const handleCreateKey = async (token: 'sSCRT' | 'sUSDC') => {
+    const tokenAddress = token === 'sSCRT' ? SSCRT_ADDRESS : SUSDC_ADDRESS;
+    const newKey = await createViewingKey(tokenAddress);
+    
+    if (newKey) {
+      setKeys(currentKeys => ({ ...currentKeys, [token]: newKey }));
+    }
   };
 
   const handleSubmit = () => {
@@ -74,11 +71,11 @@ export function ViewingKeysModal({
             Manage Viewing Keys
           </DialogTitle>
           <DialogDescription>
-            Viewing keys are required to query your token balances privately on
-            Secret Network.
+            Create a new key on-chain or paste an existing one to view balances.
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
+          {/* sSCRT Section */}
           <div className="space-y-2">
             <Label htmlFor="sSCRT-key">sSCRT Viewing Key</Label>
             <div className="flex items-center space-x-2">
@@ -86,7 +83,7 @@ export function ViewingKeysModal({
                 <Input
                   id="sSCRT-key"
                   type={showSSCRT ? "text" : "password"}
-                  placeholder="Enter sSCRT viewing key..."
+                  placeholder="Paste or create a key..."
                   value={keys.sSCRT}
                   onChange={(e) => setKeys({ ...keys, sSCRT: e.target.value })}
                   className="pr-10"
@@ -98,15 +95,16 @@ export function ViewingKeysModal({
                   className="absolute right-0 top-0 h-full px-3 py-2"
                   onClick={() => setShowSSCRT(!showSSCRT)}
                 >
-                  {showSSCRT ? (
-                    <EyeOff className="h-4 w-4" />
-                  ) : (
-                    <Eye className="h-4 w-4" />
-                  )}
+                  {showSSCRT ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </Button>
               </div>
+              <Button variant="outline" onClick={() => handleCreateKey('sSCRT')} disabled={isLoading}>
+                Create
+              </Button>
             </div>
           </div>
+          
+          {/* sUSDC Section */}
           <div className="space-y-2">
             <Label htmlFor="sUSDC-key">sUSDC Viewing Key</Label>
             <div className="flex items-center space-x-2">
@@ -114,7 +112,7 @@ export function ViewingKeysModal({
                 <Input
                   id="sUSDC-key"
                   type={showSUSDC ? "text" : "password"}
-                  placeholder="Enter sUSDC viewing key..."
+                  placeholder="Paste or create a key..."
                   value={keys.sUSDC}
                   onChange={(e) => setKeys({ ...keys, sUSDC: e.target.value })}
                   className="pr-10"
@@ -126,23 +124,14 @@ export function ViewingKeysModal({
                   className="absolute right-0 top-0 h-full px-3 py-2"
                   onClick={() => setShowSUSDC(!showSUSDC)}
                 >
-                  {showSUSDC ? (
-                    <EyeOff className="h-4 w-4" />
-                  ) : (
-                    <Eye className="h-4 w-4" />
-                  )}
+                  {showSUSDC ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </Button>
               </div>
+              <Button variant="outline" onClick={() => handleCreateKey('sUSDC')} disabled={isLoading}>
+                Create
+              </Button>
             </div>
           </div>
-          <Button
-            variant="outline"
-            onClick={generateViewingKeys}
-            className="w-full"
-          >
-            <Shuffle className="h-4 w-4 mr-2" />
-            Generate Viewing Keys
-          </Button>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={handleClose}>
@@ -150,7 +139,7 @@ export function ViewingKeysModal({
           </Button>
           <Button
             onClick={handleSubmit}
-            disabled={!keys.sSCRT.trim() || !keys.sUSDC.trim()}
+            disabled={!keys.sSCRT.trim() || !keys.sUSDC.trim() || isLoading}
           >
             Save Viewing Keys
           </Button>

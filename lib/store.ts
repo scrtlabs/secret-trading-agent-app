@@ -30,6 +30,7 @@ interface AppStore extends AppState {
   authorizeSpend: () => Promise<void>;
 
   // Viewing key actions
+  createViewingKey: (tokenAddress: string) => Promise<string | undefined>;
   setViewingKeys: (viewingKeys: ViewingKeys) => void;
   loadViewingKeys: () => Promise<void>;
 
@@ -122,6 +123,39 @@ export const useAppStore = create<AppStore>((set, get) => ({
       set({ isLoading: false });
     }
   },
+
+  createViewingKey: async (tokenAddress: string) => {
+    const { wallet } = get();
+    if (!wallet.isConnected || !wallet.secretSigner || !wallet.secretAddress || !wallet.enigmaUtils) {
+      console.error("Cannot create key: Wallet not ready.");
+      return undefined;
+    }
+
+    const { secretSigner, secretAddress, enigmaUtils } = wallet;
+    const lcdClient = secretLCDClient(secretAddress, secretSigner, enigmaUtils);
+    const newKey = "vk_" + Math.random().toString(36).substring(2, 12);
+
+    set({ isLoading: true }); // SETS THE GLOBAL LOADING STATE
+    try {
+      const tx = await lcdClient.tx.snip20.setViewingKey({
+        sender: secretAddress,
+        contract_address: tokenAddress,
+        msg: { set_viewing_key: { key: newKey } },
+      }, { gasLimit: 200_000 });
+
+      if (tx.code !== 0) {
+        throw new Error(`Transaction failed: ${tx.rawLog}`);
+      }
+      
+      return newKey;
+    } catch (error) {
+      console.error("Error creating viewing key:", error);
+      return undefined;
+    } finally {
+      set({ isLoading: false }); // ALWAYS TURNS OFF THE GLOBAL LOADING STATE
+    }
+  },
+
 
   authorizeSpend: async () => {
     const { token, wallet, agentAddress } = get();
