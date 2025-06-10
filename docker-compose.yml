@@ -1,11 +1,13 @@
-version: '3.9'
+# The version tag has been removed as it is now obsolete.
 
 services:
   nextapp:
+    build: .
+    image: nextapp
+    container_name: nextapp
     env_file:
       - .env.local
-    container_name: nextapp
-    image: nextapp
-    build: .
     ports:
       - "3000:3000"
+      - "8000:8000"
+    restart: unless-stopped

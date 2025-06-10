@@ -2,8 +2,7 @@
 
 import { ConnectWalletSection } from "@/components/connect-wallet-section";
 import { BalancesPanel } from "@/components/balances-panel";
-import { ChatWindow } from "@/components/chat-window";
-import { MessageInput } from "@/components/message-input";
+import { ChatInterface } from "@/components/chat/ChatInterface";
 import { TradeStatus } from "@/components/trade-status";
 import { StartTradingButton } from "@/components/start-trading-button";
 
@@ -33,18 +32,13 @@ export default function HomePage() {
 
           {/* Middle Column - Chat */}
           <div className="lg:col-span-2 space-y-4">
-            <ChatWindow />
-            <MessageInput />
-            <StartTradingButton />
+            <ChatInterface />
           </div>
         </div>
 
         {/* Footer */}
         <div className="text-center mt-12 text-slate-500 text-sm">
           <p>Built with React, Tailwind CSS, and Zustand</p>
-          <p className="mt-1">
-            Tip: Mention "Kanye" in your messages for some inspiration! 🎤
-          </p>
         </div>
       </div>
     </div>

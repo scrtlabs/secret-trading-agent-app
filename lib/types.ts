@@ -9,6 +9,7 @@ export interface BalanceResponse {
 export interface ChatMessage {
   content: string;
   role: "user" | "assistant";
+  thinking?: string;
 }
 
 export interface Balance {

@@ -34,11 +34,6 @@ interface AppStore extends AppState {
   setViewingKeys: (viewingKeys: ViewingKeys) => void;
   loadViewingKeys: () => Promise<void>;
 
-  // Chat actions
-  addMessage: (content: string, role: "user" | "assistant") => Promise<void>;
-  loadMessages: () => Promise<void>;
-  clearMessages: () => void;
-
   // Trade actions
   setConvinced: (convinced: boolean) => void;
   startTrading: () => Promise<void>;
@@ -65,7 +60,6 @@ export const useAppStore = create<AppStore>((set, get) => ({
     nobleUSDC: "0",
   },
   viewingKeys: null,
-  messages: [],
   trade: {
     isConvinced: false,
     isTrading: false,
@@ -348,64 +342,6 @@ export const useAppStore = create<AppStore>((set, get) => ({
       set({ isLoading: false });
       throw error;
     }
-  },
-
-  // Chat actions
-  addMessage: async (content: string, role: "user" | "assistant") => {
-    const { token, user, wallet } = get();
-    if (!token || !user || !wallet.isConnected) {
-      throw new Error("No token or user or wallet found");
-    }
-    const newMessage: ChatMessage = {
-      content,
-      role,
-    };
-
-    const { messages } = get();
-    const updatedMessages = [...messages, newMessage];
-
-    set({ messages: updatedMessages });
-    
-    const response = await fetch("/api/chat", {
-      method: "POST",
-      body: JSON.stringify({ message: content }),
-      headers: {
-        "Authorization": `Bearer ${token}`,
-      }
-    });
-
-    if (!response.ok) {
-      throw new Error("Failed to add message");
-    }
-    const { data } = await response.json();
-    const aiRes: ChatMessage = {
-      role: "assistant",
-      content: data.response,
-    } as ChatMessage
-    set({ messages: [...updatedMessages, aiRes] });
-  },
-
-  loadMessages: async () => {
-    const { user, wallet, token } = get();
-    if (!user || !wallet.isConnected || !token) {
-      return
-    }
-    const response = await fetch("/api/chat", {
-      headers: {
-        "Authorization": `Bearer ${token}`,
-      }
-    });
-    if (!response.ok) {
-      throw new Error("Failed to load messages");
-    }
-    const { data } = await response.json();
-    console.log("data", data);
-    set({ messages: data });
-  },
-
-  clearMessages: () => {
-    set({ messages: [] });
-    saveChatMessages([]);
   },
 
   // Trade actions

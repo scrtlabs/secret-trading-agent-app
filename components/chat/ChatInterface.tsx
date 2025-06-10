@@ -1,247 +1,204 @@
-'use client';
+"use client";
 
-import { useState, useEffect, useRef } from 'react';
-import { useAuth } from '@/hooks/useAuth';
-import { getAuthHeaders } from '@/utils/auth';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Send, Trash2, Loader2 } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { useAppStore } from '@/lib/store';
+import { cn } from '@/lib/utils';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import Markdown from 'react-markdown';
+import { MessageCircle, Send, ChevronDown, ChevronUp, Trash2, Loader2 } from 'lucide-react';
+import { StartTradingButton } from '@/components/start-trading-button';
 
-interface ChatMessage {
-  id: string;
-  message: string;
-  timestamp: number;
-  walletAddress: string;
-}
-
-interface ChatResponse {
-  userMessage: ChatMessage;
-  aiResponse: ChatMessage;
-  walletAddress: string;
+interface Message {
+  role: "user" | "assistant";
+  content: string;
+  thinking?: string;
 }
 
 export function ChatInterface() {
-  const { isAuthenticated, walletAddress } = useAuth();
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [inputValue, setInputValue] = useState('');
+  const { token, wallet } = useAppStore();
+
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const scrollAreaRef = useRef<HTMLDivElement>(null);
+  
+  const [streamingThinkingText, setStreamingThinkingText] = useState("");
+  const [isLiveThinkingExpanded, setIsLiveThinkingExpanded] = useState(true);
+  const [historicExpanded, setHistoricExpanded] = useState<{ [key: number]: boolean }>({});
 
-  // Load chat history on mount
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const thinkingBoxRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
-    if (isAuthenticated) {
-      loadChatHistory();
-    } else {
-      setMessages([]);
-    }
-  }, [isAuthenticated]);
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, streamingThinkingText]);
 
-  // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
-    if (scrollAreaRef.current) {
-      const scrollContainer = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]');
-      if (scrollContainer) {
-        scrollContainer.scrollTop = scrollContainer.scrollHeight;
-      }
+    if (thinkingBoxRef.current) {
+      thinkingBoxRef.current.scrollTop = thinkingBoxRef.current.scrollHeight;
     }
-  }, [messages]);
+  }, [streamingThinkingText]);
 
-  const loadChatHistory = async () => {
-    try {
-      const response = await fetch('/api/chat', {
-        headers: getAuthHeaders(),
-      });
+  const handleSendMessage = async () => {
+    if (!input.trim() || isLoading || !token) return;
 
-      if (!response.ok) {
-        throw new Error('Failed to load chat history');
-      }
-
-      const data = await response.json();
-      setMessages(data.messages || []);
-    } catch (error) {
-      console.error('Error loading chat history:', error);
-      setError('Failed to load chat history');
-    }
-  };
-
-  const sendMessage = async () => {
-    if (!inputValue.trim() || isLoading) return;
-
-    const messageText = inputValue.trim();
-    setInputValue('');
     setIsLoading(true);
-    setError(null);
+    setStreamingThinkingText("");
+    // Default the box to its collapsed, two-line preview state.
+    setIsLiveThinkingExpanded(false); 
+
+    const userMessage: Message = { role: "user", content: input };
+    const assistantPlaceholder: Message = { role: "assistant", content: "" };
+    
+    const messagesToSend = [...messages, userMessage];
+    setMessages(prev => [...prev, userMessage, assistantPlaceholder]);
+    setInput("");
+
+    const apiUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/chat`;
+    let fullResponseText = "";
+    const thinkRegex = /<think>([\s\S]*?)<\/think>/gs;
 
     try {
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...getAuthHeaders(),
-        },
-        body: JSON.stringify({ message: messageText }),
+      const response = await fetch(apiUrl, {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: messagesToSend }),
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to send message');
-      }
+      if (!response.ok || !response.body) throw new Error(`API Error: ${response.status}`);
+      
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
 
-      const data: ChatResponse = await response.json();
-      setMessages(prev => [...prev, data.userMessage, data.aiResponse]);
-    } catch (error) {
-      console.error('Error sending message:', error);
-      setError(error instanceof Error ? error.message : 'Failed to send message');
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        
+        fullResponseText += decoder.decode(value, { stream: true });
+
+        let liveThoughts = "";
+        const lastThinkStart = fullResponseText.lastIndexOf("<think>");
+        const lastThinkEnd = fullResponseText.lastIndexOf("</think>");
+        if (lastThinkStart > -1 && lastThinkStart > lastThinkEnd) {
+          liveThoughts = fullResponseText.substring(lastThinkStart + 7);
+        }
+        setStreamingThinkingText(liveThoughts);
+
+        const visibleContent = fullResponseText.replace(thinkRegex, "").replace(/<think>[\s\S]*/s, "").trim();
+        const completedMatch = fullResponseText.match(thinkRegex);
+        const thinking = completedMatch ? completedMatch.map(t => t.replace(/<\/?think>/g, "").trim()).join("\n\n---\n\n") : undefined;
+
+        setMessages(prev => {
+          const newMessages = [...prev];
+          const lastMessage = newMessages[newMessages.length - 1];
+          if (lastMessage?.role === 'assistant') {
+            lastMessage.content = visibleContent;
+            lastMessage.thinking = thinking;
+          }
+          return newMessages;
+        });
+      }
+    } catch (e: any) {
+      setMessages(prev => {
+        const newMessages = [...prev.slice(0, -1)];
+        return [...newMessages, { role: 'assistant', content: `An error occurred: ${e.message}` }];
+      });
     } finally {
       setIsLoading(false);
+      setStreamingThinkingText("");
     }
   };
 
-  const clearHistory = async () => {
-    try {
-      const response = await fetch('/api/chat', {
-        method: 'DELETE',
-        headers: getAuthHeaders(),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to clear history');
-      }
-
-      setMessages([]);
-    } catch (error) {
-      console.error('Error clearing history:', error);
-      setError('Failed to clear history');
-    }
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); }
   };
-
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage();
-    }
-  };
-
-  const formatTime = (timestamp: number) => {
-    return new Date(timestamp).toLocaleTimeString([], { 
-      hour: '2-digit', 
-      minute: '2-digit' 
-    });
-  };
-
-  const isUserMessage = (message: ChatMessage) => {
-    return message.id.includes('_user');
-  };
-
-  if (!isAuthenticated) {
-    return (
-      <Card className="w-full max-w-2xl mx-auto">
-        <CardContent className="p-6">
-          <div className="text-center text-muted-foreground">
-            Please connect your Keplr wallet to access the chat interface.
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
 
   return (
-    <Card className="w-full max-w-4xl mx-auto h-[600px] flex flex-col">
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-        <div>
-          <CardTitle>Secret Trading Assistant</CardTitle>
-          <p className="text-sm text-muted-foreground">
-            Connected: {walletAddress?.slice(0, 12)}...
-          </p>
-        </div>
-        <Button
-          onClick={clearHistory}
-          variant="outline"
-          size="sm"
-          disabled={messages.length === 0}
-        >
-          <Trash2 className="h-4 w-4 mr-2" />
-          Clear History
-        </Button>
-      </CardHeader>
-
-      <CardContent className="flex-1 flex flex-col p-0">
-        <ScrollArea ref={scrollAreaRef} className="flex-1 px-6">
-          <div className="space-y-4 pb-4">
-            {messages.length === 0 ? (
-              <div className="text-center text-muted-foreground py-8">
-                No messages yet. Start a conversation!
-              </div>
-            ) : (
-              messages.map((message) => (
-                <div
-                  key={message.id}
-                  className={`flex ${isUserMessage(message) ? 'justify-end' : 'justify-start'}`}
-                >
-                  <div
-                    className={`max-w-[80%] rounded-lg px-4 py-2 ${
-                      isUserMessage(message)
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-muted'
-                    }`}
-                  >
-                    <p className="whitespace-pre-wrap">{message.message}</p>
-                    <p className={`text-xs mt-1 ${
-                      isUserMessage(message) 
-                        ? 'text-primary-foreground/70' 
-                        : 'text-muted-foreground'
-                    }`}>
-                      {formatTime(message.timestamp)}
-                    </p>
-                  </div>
-                </div>
-              ))
-            )}
-            {isLoading && (
-              <div className="flex justify-start">
-                <div className="bg-muted rounded-lg px-4 py-2">
-                  <div className="flex items-center gap-2">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    <span>AI is thinking...</span>
-                  </div>
-                </div>
-              </div>
+    <div className="space-y-4">
+      <Card className="flex flex-col h-[70vh]">
+        <CardHeader className="flex-shrink-0">
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2"><MessageCircle className="h-5 w-5" />Chat with Trading Agent</CardTitle>
+            {messages.length > 0 && (
+                <Button variant="ghost" size="icon" onClick={() => setMessages([])}><Trash2 className="h-4 w-4" /></Button>
             )}
           </div>
-        </ScrollArea>
-
-        <div className="border-t p-4">
-          {error && (
-            <div className="text-sm text-red-500 mb-2 p-2 bg-red-50 rounded">
-              {error}
-            </div>
+        </CardHeader>
+        <CardContent className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
+          {messages.length === 0 && !isLoading && (
+            <div className="text-center text-muted-foreground py-8">Start a conversation!</div>
           )}
-          <div className="flex gap-2">
-            <Input
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              onKeyPress={handleKeyPress}
-              placeholder="Type your message..."
-              disabled={isLoading}
-              className="flex-1"
-            />
-            <Button
-              onClick={sendMessage}
-              disabled={!inputValue.trim() || isLoading}
-              size="icon"
-            >
-              {isLoading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Send className="h-4 w-4" />
-              )}
-            </Button>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+          
+          {messages.map((message, index) => {
+            const isLastMessage = index === messages.length - 1;
+            return (
+              <div key={index}>
+                {/* HISTORIC thought box */}
+                {message.role === 'assistant' && message.thinking && (
+                  <div className="mb-2 p-3 border rounded-lg bg-gray-100 dark:bg-gray-800">
+                    <div className="flex justify-between items-center cursor-pointer" onClick={() => setHistoricExpanded(prev => ({...prev, [index]: !prev[index]}))}>
+                      <span className="text-sm font-semibold text-gray-500">Thoughts</span>
+                      {historicExpanded[index] ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                    </div>
+                    {historicExpanded[index] && <pre className="mt-2 text-xs whitespace-pre-wrap font-mono p-2 bg-black text-green-400 rounded">{message.thinking}</pre>}
+                  </div>
+                )}
+
+                {/* LIVE "Thinking..." box */}
+                {isLastMessage && isLoading && streamingThinkingText.trim().length > 0 && (
+                  <div className="mb-2 p-3 border rounded-lg bg-yellow-50/50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800">
+                    <div className="flex justify-between items-center cursor-pointer" onClick={() => setIsLiveThinkingExpanded(prev => !prev)}>
+                      <span className="text-sm font-semibold text-yellow-600 dark:text-yellow-400 animate-pulse">Thinking...</span>
+                      {isLiveThinkingExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                    </div>
+                    <div
+                      ref={thinkingBoxRef}
+                      className={cn(
+                        "mt-2 rounded bg-black overflow-y-auto transition-all duration-300 ease-in-out",
+                        // --- THIS IS THE FINAL FIX ---
+                        // Use a fixed `h-12` for the collapsed state, not `max-h-12`
+                        isLiveThinkingExpanded ? "max-h-96" : "h-12"
+                      )}
+                    >
+                      <pre className="text-xs whitespace-pre-wrap font-mono p-2 text-yellow-300">
+                        {streamingThinkingText}
+                      </pre>
+                    </div>
+                  </div>
+                )}
+                
+                {message.content && (
+                  <div className={cn("flex", message.role === "user" ? "justify-end" : "justify-start")}>
+                    <div className={cn("max-w-[80%] rounded-lg px-4 py-2", message.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted")}>
+                      <Markdown>{message.content}</Markdown>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          {isLoading && messages.length > 0 && messages[messages.length-1]?.content === '' && !streamingThinkingText && (
+             <div className="flex justify-start"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+          )}
+          <div ref={messagesEndRef} />
+        </CardContent>
+      </Card>
+      
+      <div className="mt-4 flex gap-2">
+        <Input
+          placeholder={wallet.isConnected ? "Type your message..." : "Connect wallet to chat"}
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={handleKeyDown}
+          disabled={!wallet.isConnected || isLoading}
+          className="flex-1"
+        />
+        <Button onClick={handleSendMessage} disabled={!input.trim() || !wallet.isConnected || isLoading} size="icon">
+          {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+        </Button>
+      </div>
+      <StartTradingButton />
+    </div>
   );
 }
