@@ -114,7 +114,7 @@ export function ChatInterface() {
   };
 
   return (
-    <div className="max-w-3xl mx-auto p-4">
+    <div className="max-w-3xl mx-auto px-4 pb-4">
       <Card className="flex flex-col h-[75vh] bg-card/95 backdrop-blur-sm">
         <CardHeader className="flex-shrink-0 border-b">
           <div className="flex items-center justify-between">

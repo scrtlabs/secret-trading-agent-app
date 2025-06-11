@@ -11,15 +11,6 @@ export default function HomePage() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-4">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-slate-900 mb-2">
-            Secret Network Trading Agent
-          </h1>
-          <p className="text-slate-600">
-            Chat with an AI agent to convince it to execute trades on Secret
-            Network
-          </p>
-        </div>
 
         {/* Main Grid Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
