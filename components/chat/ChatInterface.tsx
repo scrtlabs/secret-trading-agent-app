@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import Markdown from 'react-markdown';
-import { MessageCircle, Send, ChevronDown, ChevronUp, Trash2, Loader2 } from 'lucide-react';
+import { MessageCircle, Send, ChevronDown, ChevronUp, Trash2, Loader2, Sparkles, BrainCircuit } from 'lucide-react';
 import { StartTradingButton } from '@/components/start-trading-button';
 
 interface Message {
@@ -45,7 +45,6 @@ export function ChatInterface() {
 
     setIsLoading(true);
     setStreamingThinkingText("");
-    // Default the box to its collapsed, two-line preview state.
     setIsLiveThinkingExpanded(false); 
 
     const userMessage: Message = { role: "user", content: input };
@@ -115,62 +114,76 @@ export function ChatInterface() {
   };
 
   return (
-    <div className="space-y-4">
-      <Card className="flex flex-col h-[70vh]">
-        <CardHeader className="flex-shrink-0">
+    <div className="max-w-3xl mx-auto p-4">
+      <Card className="flex flex-col h-[75vh] bg-card/95 backdrop-blur-sm">
+        <CardHeader className="flex-shrink-0 border-b">
           <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2"><MessageCircle className="h-5 w-5" />Chat with Trading Agent</CardTitle>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <MessageCircle className="h-5 w-5" />
+              Trading Agent Chat
+            </CardTitle>
             {messages.length > 0 && (
-                <Button variant="ghost" size="icon" onClick={() => setMessages([])}><Trash2 className="h-4 w-4" /></Button>
+                <Button variant="ghost" size="icon" onClick={() => setMessages([])}>
+                    <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+                </Button>
             )}
           </div>
         </CardHeader>
-        <CardContent className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
+        <CardContent className="flex-1 overflow-y-auto p-6 space-y-6 min-h-0">
           {messages.length === 0 && !isLoading && (
-            <div className="text-center text-muted-foreground py-8">Start a conversation!</div>
+            <div className="text-center text-muted-foreground py-12 flex flex-col items-center gap-4">
+                <Sparkles className="h-10 w-10 text-primary/50" />
+                <p>Your AI trading partner is ready.<br/>Ask anything to begin.</p>
+            </div>
           )}
           
           {messages.map((message, index) => {
             const isLastMessage = index === messages.length - 1;
             return (
-              <div key={index}>
-                {/* HISTORIC thought box */}
+              <div key={index} className="space-y-4">
+                {/* --- HISTORIC THOUGHTS BOX (Slate Gray) --- */}
                 {message.role === 'assistant' && message.thinking && (
-                  <div className="mb-2 p-3 border rounded-lg bg-gray-100 dark:bg-gray-800">
+                  <div className="p-3 border rounded-lg bg-slate-50 dark:bg-slate-800/50">
                     <div className="flex justify-between items-center cursor-pointer" onClick={() => setHistoricExpanded(prev => ({...prev, [index]: !prev[index]}))}>
-                      <span className="text-sm font-semibold text-gray-500">Thoughts</span>
+                      <span className="text-sm font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-2"><BrainCircuit size={14}/>Archived Thoughts</span>
                       {historicExpanded[index] ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                     </div>
-                    {historicExpanded[index] && <pre className="mt-2 text-xs whitespace-pre-wrap font-mono p-2 bg-black text-green-400 rounded">{message.thinking}</pre>}
+                    {historicExpanded[index] && <pre className="mt-2 text-xs whitespace-pre-wrap font-mono p-3 bg-slate-900 text-slate-300 rounded-md">{message.thinking}</pre>}
                   </div>
                 )}
 
-                {/* LIVE "Thinking..." box */}
+                {/* --- LIVE "THINKING..." BOX (NOW ALSO Slate Gray) --- */}
                 {isLastMessage && isLoading && streamingThinkingText.trim().length > 0 && (
-                  <div className="mb-2 p-3 border rounded-lg bg-yellow-50/50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800">
+                  <div className="p-3 border rounded-lg bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700">
                     <div className="flex justify-between items-center cursor-pointer" onClick={() => setIsLiveThinkingExpanded(prev => !prev)}>
-                      <span className="text-sm font-semibold text-yellow-600 dark:text-yellow-400 animate-pulse">Thinking...</span>
+                      <span className="text-sm font-semibold text-slate-500 dark:text-slate-400 animate-pulse flex items-center gap-2">
+                        <BrainCircuit size={14}/>Thinking...
+                      </span>
                       {isLiveThinkingExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                     </div>
                     <div
                       ref={thinkingBoxRef}
                       className={cn(
-                        "mt-2 rounded bg-black overflow-y-auto transition-all duration-300 ease-in-out",
-                        // --- THIS IS THE FINAL FIX ---
-                        // Use a fixed `h-12` for the collapsed state, not `max-h-12`
+                        "mt-2 rounded-md bg-slate-900 overflow-y-auto transition-all duration-300 ease-in-out",
                         isLiveThinkingExpanded ? "max-h-96" : "h-12"
                       )}
                     >
-                      <pre className="text-xs whitespace-pre-wrap font-mono p-2 text-yellow-300">
+                      {/* --- Text color is now slate-300 instead of blue-300 --- */}
+                      <pre className="text-xs whitespace-pre-wrap font-mono p-3 text-slate-300">
                         {streamingThinkingText}
                       </pre>
                     </div>
                   </div>
                 )}
                 
+                {/* --- MESSAGE BUBBLES --- */}
                 {message.content && (
-                  <div className={cn("flex", message.role === "user" ? "justify-end" : "justify-start")}>
-                    <div className={cn("max-w-[80%] rounded-lg px-4 py-2", message.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted")}>
+                  <div className={cn("flex items-end gap-2", message.role === "user" ? "justify-end" : "justify-start")}>
+                    {message.role === 'assistant' && <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center"><Sparkles className="h-4 w-4 text-primary"/></div>}
+                    <div className={cn(
+                      "max-w-[85%] rounded-lg px-4 py-2 shadow-sm",
+                      message.role === "user" ? "bg-primary text-primary-foreground rounded-br-none" : "bg-slate-100 dark:bg-slate-800 text-foreground rounded-bl-none"
+                    )}>
                       <Markdown>{message.content}</Markdown>
                     </div>
                   </div>
@@ -179,26 +192,34 @@ export function ChatInterface() {
             );
           })}
           {isLoading && messages.length > 0 && messages[messages.length-1]?.content === '' && !streamingThinkingText && (
-             <div className="flex justify-start"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+             <div className="flex justify-start items-center gap-2 text-muted-foreground">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                <span>Waiting for response...</span>
+             </div>
           )}
           <div ref={messagesEndRef} />
         </CardContent>
+        
+        {/* --- INPUT AREA --- */}
+        <div className="border-t p-4 flex-shrink-0 bg-background/80">
+          <div className="flex gap-2 items-center">
+            <Input
+              placeholder={wallet.isConnected ? "Type your message..." : "Connect wallet to chat"}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              disabled={!wallet.isConnected || isLoading}
+              className="flex-1"
+            />
+            <Button onClick={handleSendMessage} disabled={!input.trim() || !wallet.isConnected || isLoading} size="icon" className="flex-shrink-0">
+              {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            </Button>
+          </div>
+          <div className="mt-3 flex justify-center">
+            <StartTradingButton />
+          </div>
+        </div>
       </Card>
-      
-      <div className="mt-4 flex gap-2">
-        <Input
-          placeholder={wallet.isConnected ? "Type your message..." : "Connect wallet to chat"}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          disabled={!wallet.isConnected || isLoading}
-          className="flex-1"
-        />
-        <Button onClick={handleSendMessage} disabled={!input.trim() || !wallet.isConnected || isLoading} size="icon">
-          {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-        </Button>
-      </div>
-      <StartTradingButton />
     </div>
   );
 }
