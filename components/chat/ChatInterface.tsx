@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAppStore } from '@/lib/store';
 import { cn } from '@/lib/utils';
-import { secretLCDClient } from '@/lib/utils'; // You will need this utility
+import { secretLCDClient } from '@/lib/utils'; 
 
 // Your UI components
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,10 +23,8 @@ interface Message {
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
 
 export function ChatInterface() {
-  // --- This is the corrected list of functions from the store ---
   const { token, wallet, setTradeStatus, setLastTradeResult, fetchBalances } = useAppStore();
 
-  // All of your state management is correct
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);

@@ -141,7 +141,6 @@ class TradingAgent:
                 sscrt_ok = True
             print(f"[DEBUG] sSCRT check result: {'OK' if sscrt_ok else 'FAILED'}")
 
-            # --- Final Update ---
             print(f"\n[DEBUG] Updating DB with final status: sSCRT={sscrt_ok}, sUSDC={susdc_ok}")
             updated_user = await db.update_user_allowance(user_id, sscrt_ok, susdc_ok)
             
@@ -186,7 +185,6 @@ class TradingAgent:
         print(f"Preparing trade transaction for user: {user_id}")
         amount_usdc = "300000"
         
-        # Your shade.py function is perfect. It gives us the data we need.
         contract_address, code_hash, msg_dict = create_buy_scrt_msg_data(amount_usdc, user_id)
 
         # Return a dictionary of the arguments that SecretJS on the frontend can use directly.
