@@ -17,8 +17,18 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Copy the .env.local file and rename it to .env for the build process
-COPY .env.local ./.env
+# Copy the .env.local file and rename it to .env for the build process (for local testing)
+#COPY .env.local ./.env
+
+# 1. Declare the build-time arguments you will receive from the YAML file.
+#    This makes them available inside this build stage.
+ARG NEXT_PUBLIC_API_BASE_URL
+ARG LCD_URL
+
+# 2. Create the .env file from these arguments. The Next.js build process
+#    will automatically read this file.
+RUN echo "NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}" > .env
+RUN echo "NEXT_PUBLIC_LCD_URL=${LCD_URL}" >> .env
 
 RUN npm install -g pnpm
 RUN pnpm run build
