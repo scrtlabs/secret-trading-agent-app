@@ -1,6 +1,8 @@
+// components/ConnectWalletSection.tsx (Final, Cleaned Version)
+
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -9,7 +11,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Wallet, WalletIcon as WalletX, Handshake } from "lucide-react";
+import { Wallet, WalletIcon as WalletX } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { truncateAddress } from "@/lib/utils";
 
@@ -20,13 +22,12 @@ export function ConnectWalletSection() {
     connectWallet,
     disconnectWallet,
     getAutoConnect,
-    authorizeSpend,
-    user,
+    user, // We still need `user` to know when the connection is fully complete
   } = useAppStore();
 
   useEffect(() => {
     if (getAutoConnect()) {
-      connectWallet();
+      // connectWallet(); // Keep commented for manual testing, or re-enable
     }
   }, []);
 
@@ -42,10 +43,8 @@ export function ConnectWalletSection() {
     disconnectWallet();
   };
 
+  // --- The UI is now much simpler ---
   if (wallet.isConnected && wallet.secretAddress && user) {
-    const isAllowedToSpend =
-      user.allowed_to_spend_sscrt === "true" &&
-      user.allowed_to_spend_susdc === "true";
     return (
       <Card>
         <CardHeader>
@@ -57,17 +56,8 @@ export function ConnectWalletSection() {
             Secret Address: {truncateAddress(wallet.secretAddress)}
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          {!isAllowedToSpend && (
-            <Button
-              onClick={authorizeSpend}
-              variant="default"
-              className="w-full"
-            >
-              <Handshake className="h-4 w-4 mr-2" />
-              Authorize Spending
-            </Button>
-          )}
+        <CardContent>
+          {/* The "Authorize Spending" button and its logic are now gone. */}
           <Button
             onClick={handleDisconnect}
             variant="outline"
@@ -81,6 +71,7 @@ export function ConnectWalletSection() {
     );
   }
 
+  // This part for the disconnected state is correct and remains the same.
   return (
     <Card>
       <CardHeader>
@@ -89,10 +80,10 @@ export function ConnectWalletSection() {
           Connect Wallet
         </CardTitle>
         <CardDescription>
-          Use Keplr Browser Extension to connect to Secret Network and Noble
+          Use Keplr Browser Extension to connect to Secret Network
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent>
         <Button onClick={handleConnect} disabled={isLoading} className="w-full">
           {isLoading ? "Connecting..." : "Connect Wallet"}
         </Button>

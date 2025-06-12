@@ -92,6 +92,8 @@ export const getSnip20Balance = async (
   viewingKey: string | undefined,
   lcdClient: SecretNetworkClient,
   userAddress: string,
+  // --- ADD THIS NEW PARAMETER ---
+  codeHash: string
 ): Promise<string> => {
   if (!viewingKey) {
     throw new Error("Viewing key not set");
@@ -102,11 +104,13 @@ export const getSnip20Balance = async (
     const result = (await lcdClient.query.compute.queryContract({
       contract_address: tokenAddress,
       query,
+      // --- ADD THIS LINE ---
+      code_hash: codeHash, // This makes the query fast and eliminates the warning
     })) as BalanceResponse;
     return result.balance.amount;
   } catch (error: any) {
     console.error(`Error querying balance for ${tokenAddress}:`, error.message);
-    return `Error querying balance (${error.message})`;
+    return `Error`; // Return a simple error string
   }
 };
 

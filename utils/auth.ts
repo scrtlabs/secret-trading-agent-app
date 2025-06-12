@@ -15,6 +15,10 @@ export interface DecodedJWT {
   exp: number;
 }
 
+
+// Get the backend URL from the environment variable.
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
+
 /**
  * Connects to Keplr wallet and returns the wallet address
  */
@@ -65,25 +69,23 @@ export async function signMessage(
  */
 export async function loginWithKeplr(): Promise<LoginResult> {
   try {
-    // Connect to wallet
     const walletAddress = await connectKeplr();
-
-    // Create a challenge message with timestamp to prevent replay attacks
+    
+    // --- CHANGE 1: The user still signs the human-readable message ---
     const timestamp = Date.now();
     const message = `Login to Secret Trading App\nTimestamp: ${timestamp}\nWallet: ${walletAddress}`;
-
-    // Sign the message
     const signature = await signMessage(walletAddress, message);
 
-    // Send to backend for verification
-    const response = await fetch("/api/auth/login", {
+    // --- CHANGE 2: The payload sent to the backend is now structured ---
+    const response = await fetch(`${API_BASE_URL}/api/login`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
+      // We send the raw timestamp integer, not the whole message string.
       body: JSON.stringify({
         walletAddress,
-        message,
+        timestamp, // <-- Send the raw timestamp
         signature,
       }),
     });
@@ -93,23 +95,19 @@ export async function loginWithKeplr(): Promise<LoginResult> {
       throw new Error(`Login failed: ${error}`);
     }
 
-    const { data } = await response.json();
-
-    if (!data) {
-      throw new Error("Login failed: No data returned");
+    // The rest of the function is correct
+    const loginData = await response.json();
+    if (!loginData.data) {
+      throw new Error("Login failed: No data returned from server");
     }
-
-    // Store token in localStorage
-    localStorage.setItem("auth_token", data.token);
-
-    return {
-      data,
-    };
+    localStorage.setItem("auth_token", loginData.data.token);
+    return loginData;
   } catch (error) {
     console.error("Login error:", error);
     throw error;
   }
 }
+
 
 /**
  * Gets the stored authentication token

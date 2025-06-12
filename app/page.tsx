@@ -29,7 +29,7 @@ export default function HomePage() {
 
         {/* Footer */}
         <div className="text-center mt-12 text-slate-500 text-sm">
-          <p>Built with React, Tailwind CSS, and Zustand</p>
+          <p>🤫 🌏</p>
         </div>
       </div>
     </div>

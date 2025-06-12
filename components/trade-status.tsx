@@ -1,12 +1,15 @@
-"use client"
+// components/TradeStatus.tsx (Final, Cleaned Version)
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { TrendingUp, Clock, CheckCircle } from "lucide-react"
-import { useAppStore } from "@/lib/store"
+"use client";
+
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { TrendingUp, Clock, CheckCircle } from "lucide-react";
+import { useAppStore } from "@/lib/store";
 
 export function TradeStatus() {
-  const { trade, wallet, user } = useAppStore()
+  // We no longer need the `isAllowedToSpend` check, so we can simplify the destructuring.
+  const { trade, wallet, user } = useAppStore();
 
   if (!wallet.isConnected || !user) {
     return (
@@ -22,9 +25,11 @@ export function TradeStatus() {
           <Badge variant="secondary">Disconnected</Badge>
         </CardContent>
       </Card>
-    )
+    );
   }
-  const isAllowedToSpend = user.allowed_to_spend_sscrt === 'true' && user.allowed_to_spend_susdc === 'true';
+
+  // --- THIS IS THE FIX ---
+  // The 'isAllowedToSpend' constant and the entire "Agent Status" div have been removed.
   return (
     <Card>
       <CardHeader>
@@ -32,16 +37,10 @@ export function TradeStatus() {
           <TrendingUp className="h-5 w-5" />
           Trade Status
         </CardTitle>
-        <CardDescription>Current trading agent status</CardDescription>
+        <CardDescription>The status of your most recent trade</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
-        <div className="flex items-center justify-between">
-          <span>Agent Status:</span>
-          <Badge variant={isAllowedToSpend ? "default" : "secondary"}>
-            {isAllowedToSpend ? "Authorized to spend" : "Not Authorized to spend"}
-          </Badge>
-        </div>
-
+        {/* The component now starts directly with the trading status */}
         <div className="flex items-center justify-between">
           <span>Trading:</span>
           <div className="flex items-center gap-2">
@@ -61,12 +60,13 @@ export function TradeStatus() {
           </div>
         </div>
 
+        {/* This logic for displaying the result remains perfect */}
         {trade.lastTradeResult && (
-          <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
-            <p className="text-sm text-green-800">{trade.lastTradeResult}</p>
+          <div className="mt-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+            <p className="text-sm text-green-800 dark:text-green-200 whitespace-pre-wrap">{trade.lastTradeResult}</p>
           </div>
         )}
       </CardContent>
     </Card>
-  )
+  );
 }

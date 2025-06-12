@@ -2,3 +2,7 @@ fastapi
 uvicorn[standard]
 ollama
 python-dotenv
+secret-sdk
+setuptools
+python-jose[cryptography]
+passlib[bcrypt]

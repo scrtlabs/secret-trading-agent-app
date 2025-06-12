@@ -1,20 +1,15 @@
+// lib/store.ts
+
+"use client";
+
 import { create } from "zustand";
-import type { AppState, ChatMessage, Balance, ViewingKeys } from "./types";
-import {
-  saveChatMessages,
-  loadChatMessages,
-  loadViewingKeys,
-  saveViewingKeys,
-} from "./localStorage";
-import {
-  setupKeplr,
-  formatAmount,
-  secretLCDClient,
-  getSnip20Balance,
-} from "./utils";
-import { SSCRT_ADDRESS, SUSDC_ADDRESS, SUSDC_VIEWING_KEY } from "./constants";
-import { SSCRT_VIEWING_KEY } from "./constants";
-import { getAuthToken, getWalletAddressFromToken, isTokenExpired, loginWithKeplr, logout } from "@/utils/auth";
+import type { AppState, Balance, ViewingKeys } from "./types";
+import { loadViewingKeys, saveViewingKeys } from "./localStorage";
+import { setupKeplr, secretLCDClient, formatAmount, getSnip20Balance } from "./utils";
+import { getAuthToken, isTokenExpired, loginWithKeplr, logout } from "@/utils/auth";
+import { SSCRT_ADDRESS, SSCRT_CODE_HASH, SUSDC_ADDRESS, SUSDC_CODE_HASH } from "./constants";
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
 
 interface AppStore extends AppState {
   // Wallet actions
@@ -32,7 +27,7 @@ interface AppStore extends AppState {
   // Viewing key actions
   createViewingKey: (tokenAddress: string) => Promise<string | undefined>;
   setViewingKeys: (viewingKeys: ViewingKeys) => void;
-  loadViewingKeys: () => Promise<void>;
+  loadViewingKeysFromStorage: () => void;
 
   // Trade actions
   setConvinced: (convinced: boolean) => void;
@@ -74,47 +69,75 @@ export const useAppStore = create<AppStore>((set, get) => ({
   connectWallet: async () => {
     set({ isLoading: true });
     try {
-      if (!window.keplr) {
-        console.warn("Please install Keplr extension to continue.");
-        return;
-      }
-      const { secretAddress, secretSigner, secretChain, enigmaUtils } = await setupKeplr();
+        if (!window.keplr) throw new Error("Please install Keplr.");
 
-      let existingToken = getAuthToken();
-      const walletAddress = getWalletAddressFromToken();
-
-      if (existingToken && walletAddress && isTokenExpired(existingToken)) {
-        logout();
-        existingToken = null;
-      }
-
-      if (!existingToken) {
-        const data = await loginWithKeplr();
-        const { data: { user, token } } = data;
-        set({ user, token });
-        existingToken = token;
-      }
-
-      const payload = {
-        token: existingToken,
-        wallet: {
-          isConnected: true,
-          secretAddress,
-          secretSigner,
-          secretChain,
-          enigmaUtils
+        // Step 1: Connect wallet and get a valid token
+        const { secretAddress, secretSigner, secretChain, enigmaUtils } = await setupKeplr();
+        let token = getAuthToken();
+        if (!token || isTokenExpired(token)) {
+            logout();
+            const loginData = await loginWithKeplr();
+            token = loginData.data.token;
         }
-      }
-      set(payload);
-      await get().fetchUser(existingToken);
-      await get().fetchAgentAddress();
-      get().loadViewingKeys();
-      localStorage.setItem("keplrAutoConnect", "true");
-    } catch (error) {
-      alert("Session expired. Logging out.");
-      get().disconnectWallet();
-    } finally {
-      set({ isLoading: false });
+
+        // Step 2: Fetch non-user data
+        const agentResponse = await fetch(`${API_BASE_URL}/api/agent/address`, {
+            headers: { "Authorization": `Bearer ${token}` }
+        });
+        if (!agentResponse.ok) throw new Error("Failed to fetch agent address.");
+        const { data: agentAddress } = await agentResponse.json();
+        
+        // Step 3: Get the most up-to-date user status by checking allowances
+        let finalUserData = null;
+        try {
+            console.log("Attempting to verify on-chain allowances to get latest user status...");
+            const verificationResponse = await fetch(`${API_BASE_URL}/api/user/authorize_spend`, {
+                headers: { "Authorization": `Bearer ${token}` }
+            });
+            if (verificationResponse.ok) {
+                const { data: verifiedUserData } = await verificationResponse.json();
+                finalUserData = verifiedUserData;
+                console.log("Allowance check successful. User status is up-to-date.");
+            } else {
+                 const err = await verificationResponse.json();
+                 console.warn(`Initial allowance check failed (this is expected if viewing keys are not set): ${err.detail}`);
+            }
+        } catch (e) {
+            console.warn("Could not perform initial allowance check.", e);
+        }
+        
+        // If the allowance check failed (e.g., no viewing keys), fall back to basic info.
+        if (!finalUserData) {
+            console.log("Falling back to basic user info endpoint...");
+            const userResponse = await fetch(`${API_BASE_URL}/api/user/info`, {
+                headers: { "Authorization": `Bearer ${token}` }
+            });
+            if (!userResponse.ok) throw new Error("Failed to fetch user info.");
+            const { data: userData } = await userResponse.json();
+            finalUserData = userData;
+        }
+        
+        const viewingKeys = loadViewingKeys();
+
+        // Step 4: Perform the single, atomic update with the best data we could get.
+        set({
+            token,
+            user: finalUserData,
+            agentAddress,
+            viewingKeys: viewingKeys || null,
+            wallet: {
+                isConnected: true,
+                secretAddress, secretSigner, secretChain, enigmaUtils
+            },
+            isLoading: false
+        });
+        localStorage.setItem("keplrAutoConnect", "true");
+
+    } catch (error: any) {
+        console.error("Connection failed:", error.message);
+        alert("Connection or login failed. Please try again.");
+        get().disconnectWallet();
+        set({ isLoading: false });
     }
   },
 
@@ -152,50 +175,46 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
 
   authorizeSpend: async () => {
-    const { token, wallet, agentAddress } = get();
-    const { secretSigner, secretAddress, enigmaUtils } = wallet
-
-    if (!token || !wallet.isConnected || !secretSigner || !secretAddress || !agentAddress) {
-      throw new Error("No token or wallet found");
+    const { token, wallet, agentAddress, user } = get();
+    if (!token || !wallet.isConnected || !wallet.secretAddress || !agentAddress) {
+      throw new Error("Cannot authorize: Wallet or session not ready.");
+    }
+    
+    // --- THIS IS THE FIX ---
+    // First, check if the user is already authorized.
+    if (user?.allowed_to_spend_susdc === "true") {
+        alert("You are already authorized to spend sUSDC.");
+        return;
     }
 
-    const lcdClient = secretLCDClient(secretAddress, secretSigner, enigmaUtils);
-    await lcdClient.tx.snip20.increaseAllowance({
-      sender: secretAddress,
-      contract_address: SSCRT_ADDRESS,
-      msg: {
-        increase_allowance: {
-          spender: agentAddress,
-          amount: "8000000"
-        }
-      }
-    }, {
-      gasLimit: 5_000_000,
-    },)
-    await lcdClient.tx.snip20.increaseAllowance({
-      sender: secretAddress,
-      contract_address: SUSDC_ADDRESS,
-      msg: {
-        increase_allowance: {
-          spender: agentAddress,
-          amount: "8000000"
-        }
-      }
-    }, {
-      gasLimit: 5_000_000,
-    },)
+    set({ isLoading: true });
+    try {
+        // This on-chain logic is now only run when necessary.
+        const lcdClient = secretLCDClient(wallet.secretAddress, wallet.secretSigner, wallet.enigmaUtils);
+        await lcdClient.tx.compute.executeContract({
+            sender: wallet.secretAddress,
+            contract_address: SUSDC_ADDRESS,
+            msg: { increase_allowance: { spender: agentAddress, amount: "100000000" } },
+            code_hash: SUSDC_CODE_HASH,
+        }, { gasLimit: 150_000 });
 
+        console.log("On-chain approval successful. Verifying with backend...");
 
-    const response = await fetch("/api/user/authorize_spend", {
-      headers: {
-        "Authorization": `Bearer ${token}`,
-      }
-    });
-    if (!response.ok) {
-      throw new Error("Failed to authorize spend");
+        // After success, ask the backend to verify and update its DB.
+        const response = await fetch(`${API_BASE_URL}/api/user/authorize_spend`, {
+            headers: { "Authorization": `Bearer ${token}` }
+        });
+        if (!response.ok) throw new Error("Backend failed to verify spend authorization.");
+
+        const { data: updatedUser } = await response.json();
+        set({ user: updatedUser }); // Update the UI with the confirmed status.
+
+    } catch (error: any) {
+        console.error("Authorization failed:", error);
+        alert(`Failed to authorize spending: ${error.message}`);
+    } finally {
+        set({ isLoading: false });
     }
-
-    await get().fetchUser(token);
   },
 
   disconnectWallet: () => {
@@ -224,36 +243,40 @@ export const useAppStore = create<AppStore>((set, get) => ({
   // Viewing key actions
   setViewingKeys: async (viewingKeys: ViewingKeys) => {
     try {
-      const { token } = get();
-      if (!token || !viewingKeys) {
-        throw new Error("User or viewing keys not found");
-      }
-      const { sSCRT, sUSDC } = viewingKeys;
-      const payload = {
-        sscrtKey: sSCRT,
-        susdcKey: sUSDC,
-      }
-      const response = await fetch("/api/user/keys", {
-        method: "POST",
-        body: JSON.stringify(payload),
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-        },
-      });
-      if (!response.ok) {
-        throw new Error("Failed to set viewing keys");
-      }
-      const data = await response.json();
-      console.log(data);
-      saveViewingKeys(viewingKeys);
-      set({ viewingKeys });
+        const { token } = get();
+        if (!token || !viewingKeys) {
+            throw new Error("User or viewing keys not found");
+        }
+
+        // Send the new keys to the Python backend to be saved
+        const response = await fetch(`${API_BASE_URL}/api/user/keys`, {
+            method: "POST",
+            body: JSON.stringify({ sscrtKey: viewingKeys.sSCRT, susdcKey: viewingKeys.sUSDC }),
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${token}`,
+            },
+        });
+
+        if (!response.ok) {
+            throw new Error("Failed to set viewing keys on the backend.");
+        }
+
+        // Save keys locally for future sessions
+        saveViewingKeys(viewingKeys);
+        // Update the state to remove the overlay
+        set({ viewingKeys });
+        
+        // Now that keys are set, fetch balances
+        get().fetchBalances();
+
     } catch (error) {
-      alert("Failed to set viewing keys");
+        console.error("Failed to set viewing keys:", error);
+        alert("Failed to set viewing keys");
     }
   },
 
-  loadViewingKeys: async () => {
+  loadViewingKeysFromStorage: () => {
     const viewingKeys = loadViewingKeys();
     if (viewingKeys) {
       set({ viewingKeys });
@@ -265,22 +288,28 @@ export const useAppStore = create<AppStore>((set, get) => ({
   },
 
   fetchUser: async (token?: string) => {
-    const { token: _token } = get()
-    const tokenToUse = _token || token;
+    // This new logic fixes the race condition.
+    // 1. Prioritize the token passed as an argument.
+    // 2. Fall back to the token in the store's state only if no argument is given.
+    const tokenToUse = token || get().token;
+
     if (!tokenToUse) {
-      throw new Error("No token found");
+      throw new Error("No token found for fetchUser call.");
     }
 
-    const response = await fetch("/api/user/info", {
+    const response = await fetch(`${API_BASE_URL}/api/user/info`, {
       headers: {
         "Authorization": `Bearer ${tokenToUse}`,
       }
     });
+
     if (!response.ok) {
+      // This helps in debugging if the error persists.
+      console.error(`fetchUser failed with status: ${response.status}`);
       throw new Error("Failed to fetch user");
     }
+    
     const { data } = await response.json();
-    console.log("data", data);
     set({ user: data });
   },
 
@@ -289,7 +318,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
     if (!token || !wallet.isConnected) {
       throw new Error("No token or wallet found");
     }
-    const response = await fetch("/api/agent/address", {
+    const response = await fetch(`${API_BASE_URL}/api/agent/address`, {
       headers: {
         "Authorization": `Bearer ${token}`,
       }
@@ -307,40 +336,28 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
     set({ isLoading: true });
     try {
-      // Simulate API call
-      const { secretSigner, secretChain, secretAddress, enigmaUtils } = wallet;
+        const { secretAddress, secretSigner, enigmaUtils } = wallet;
+        if (!secretAddress || !secretSigner) throw new Error("Wallet not fully connected.");
+        
+        const lcdClient = secretLCDClient(secretAddress, secretSigner, enigmaUtils);
 
-      if (!secretChain || !secretSigner || !secretAddress) {
-        throw new Error("Wallet is not connected");
-      }
+        // --- Pass the code hashes to the updated utility function ---
+        const sscrtCoinBalance = await getSnip20Balance(
+            SSCRT_ADDRESS, viewingKeys.sSCRT, lcdClient, secretAddress, SSCRT_CODE_HASH
+        );
+        const sUSDCBalance = await getSnip20Balance(
+            SUSDC_ADDRESS, viewingKeys.sUSDC, lcdClient, secretAddress, SUSDC_CODE_HASH
+        );
 
-      const lcdClient = secretLCDClient(secretAddress, secretSigner, enigmaUtils);
+        const mockBalances = {
+          sSCRT: formatAmount(sscrtCoinBalance, 6).toString(),
+          sUSDC: formatAmount(sUSDCBalance, 6).toString(),
+        };
 
-      const sscrtCoinBalance = await getSnip20Balance(
-        SSCRT_ADDRESS,
-        viewingKeys.sSCRT,
-        lcdClient,
-        secretAddress,
-      );
-      const sscrtCoinFormattedBal = formatAmount(sscrtCoinBalance, 6);
-
-      const sUSDCBalance = await getSnip20Balance(
-        SUSDC_ADDRESS,
-        viewingKeys.sUSDC,
-        lcdClient,
-        secretAddress,
-      );
-      const sUSDCFormattedBal = formatAmount(sUSDCBalance, 6);
-
-      const mockBalances = {
-        sSCRT: sscrtCoinFormattedBal.toString(),
-        sUSDC: sUSDCFormattedBal.toString(),
-      };
-
-      set({ balances: mockBalances, isLoading: false });
+        set({ balances: mockBalances, isLoading: false });
     } catch (error) {
-      set({ isLoading: false });
-      throw error;
+        console.error("Failed to fetch balances:", error);
+        set({ isLoading: false });
     }
   },
 
@@ -351,39 +368,19 @@ export const useAppStore = create<AppStore>((set, get) => ({
     }));
   },
 
-  startTrading: async () => {
-    set((state) => ({
-      trade: { ...state.trade, isTrading: true },
-      isLoading: true,
+  setTradeStatus: (isTrading: boolean) => {
+    set((state) => ({ 
+        trade: { ...state.trade, isTrading },
+        ...(isTrading && { lastTradeResult: undefined })
     }));
-
-    try {
-      // Simulate trading
-      await new Promise((resolve) => setTimeout(resolve, 3000));
-
-      set((state) => ({
-        trade: {
-          ...state.trade,
-          isTrading: false,
-          lastTradeResult:
-            "Trade executed successfully! Bought 10 SCRT with 50 sUSDC",
-        },
-        isLoading: false,
-      }));
-
-      // Refresh balances
-      get().fetchBalances();
-    } catch (error) {
-      set((state) => ({
-        trade: { ...state.trade, isTrading: false },
-        isLoading: false,
-      }));
-      throw error;
-    }
+  },
+  setLastTradeResult: (result: string) => {
+      set((state) => ({ trade: { ...state.trade, lastTradeResult: result } }));
   },
 
   // UI actions
   setLoading: (loading: boolean) => {
     set({ isLoading: loading });
   },
+
 }));

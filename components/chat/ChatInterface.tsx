@@ -3,26 +3,33 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAppStore } from '@/lib/store';
 import { cn } from '@/lib/utils';
+import { secretLCDClient } from '@/lib/utils'; // You will need this utility
+
+// Your UI components
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import Markdown from 'react-markdown';
 import { MessageCircle, Send, ChevronDown, ChevronUp, Trash2, Loader2, Sparkles, BrainCircuit } from 'lucide-react';
-import { StartTradingButton } from '@/components/start-trading-button';
 
+// The Message type from your original code
 interface Message {
   role: "user" | "assistant";
   content: string;
   thinking?: string;
 }
 
-export function ChatInterface() {
-  const { token, wallet } = useAppStore();
+// Get the backend URL from environment variables
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
 
+export function ChatInterface() {
+  // --- This is the corrected list of functions from the store ---
+  const { token, wallet, setTradeStatus, setLastTradeResult, fetchBalances } = useAppStore();
+
+  // All of your state management is correct
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  
   const [streamingThinkingText, setStreamingThinkingText] = useState("");
   const [isLiveThinkingExpanded, setIsLiveThinkingExpanded] = useState(true);
   const [historicExpanded, setHistoricExpanded] = useState<{ [key: number]: boolean }>({});
@@ -32,7 +39,7 @@ export function ChatInterface() {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, streamingThinkingText]);
+  }, [messages]);
 
   useEffect(() => {
     if (thinkingBoxRef.current) {
@@ -40,69 +47,113 @@ export function ChatInterface() {
     }
   }, [streamingThinkingText]);
 
+
   const handleSendMessage = async () => {
     if (!input.trim() || isLoading || !token) return;
 
     setIsLoading(true);
     setStreamingThinkingText("");
-    setIsLiveThinkingExpanded(false); 
 
     const userMessage: Message = { role: "user", content: input };
-    const assistantPlaceholder: Message = { role: "assistant", content: "" };
-    
     const messagesToSend = [...messages, userMessage];
-    setMessages(prev => [...prev, userMessage, assistantPlaceholder]);
+    setMessages(prev => [...prev, userMessage]);
     setInput("");
 
-    const apiUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/chat`;
-    let fullResponseText = "";
-    const thinkRegex = /<think>([\s\S]*?)<\/think>/gs;
-
     try {
-      const response = await fetch(apiUrl, {
+      const response = await fetch(`${API_BASE_URL}/api/chat`, {
         method: "POST",
         headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
         body: JSON.stringify({ messages: messagesToSend }),
       });
 
-      if (!response.ok || !response.body) throw new Error(`API Error: ${response.status}`);
-      
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
+      if (!response.ok) throw new Error(`API Error: ${response.status} ${response.statusText}`);
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+      const contentType = response.headers.get("content-type");
+
+      // Handle the JSON "action" response for trading
+      if (contentType && contentType.includes("application/json")) {
+        setMessages(prev => [...prev, { role: "assistant", content: "" }]);
+        const { action, trade_args, message } = await response.json();
         
-        fullResponseText += decoder.decode(value, { stream: true });
-
-        let liveThoughts = "";
-        const lastThinkStart = fullResponseText.lastIndexOf("<think>");
-        const lastThinkEnd = fullResponseText.lastIndexOf("</think>");
-        if (lastThinkStart > -1 && lastThinkStart > lastThinkEnd) {
-          liveThoughts = fullResponseText.substring(lastThinkStart + 7);
-        }
-        setStreamingThinkingText(liveThoughts);
-
-        const visibleContent = fullResponseText.replace(thinkRegex, "").replace(/<think>[\s\S]*/s, "").trim();
-        const completedMatch = fullResponseText.match(thinkRegex);
-        const thinking = completedMatch ? completedMatch.map(t => t.replace(/<\/?think>/g, "").trim()).join("\n\n---\n\n") : undefined;
-
+        // Update the UI with the agent's confirmation message
         setMessages(prev => {
-          const newMessages = [...prev];
-          const lastMessage = newMessages[newMessages.length - 1];
-          if (lastMessage?.role === 'assistant') {
-            lastMessage.content = visibleContent;
-            lastMessage.thinking = thinking;
-          }
-          return newMessages;
+            const newMessages = [...prev];
+            newMessages[newMessages.length - 1].content = message;
+            return newMessages;
         });
+
+        if (action === "execute_trade") {
+          setTradeStatus(true);
+          try {
+            if (!wallet.isConnected || !wallet.secretAddress || !wallet.secretSigner) {
+              throw new Error("Wallet is not ready for trading.");
+            }
+            const lcdClient = secretLCDClient(wallet.secretAddress, wallet.secretSigner, wallet.enigmaUtils);
+            
+            const tx = await lcdClient.tx.compute.executeContract(trade_args, { gasLimit: 3_000_000 });
+
+            // --- REFRESH BALANCES ON SUCCESS ---
+            if (tx.code === 0) {
+              const successMessage = `Trade successful! Hash: ${tx.transactionHash}`;
+              setMessages(prev => [...prev, { role: "assistant", content: successMessage }]);
+              setLastTradeResult(successMessage);
+              
+              console.log("Trade successful, refreshing balances...");
+              fetchBalances(); // This refreshes the balance panel
+              
+            } else {
+              const errorMessage = `On-chain error (code ${tx.code}): ${tx.rawLog}`;
+              setMessages(prev => [...prev, { role: "assistant", content: errorMessage }]);
+              setLastTradeResult(errorMessage);
+            }
+          } catch (e: any) {
+            const errorMessage = `Failed to sign or broadcast trade: ${e.message}`;
+            setMessages(prev => [...prev, { role: "assistant", content: errorMessage }]);
+            setLastTradeResult(errorMessage);
+          } finally {
+            setTradeStatus(false);
+          }
+        }
+      } else {
+        if (!response.body) throw new Error("Response body is null");
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let fullResponseText = "";
+        
+        setMessages(prev => [...prev, { role: "assistant", content: "" }]);
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          fullResponseText += decoder.decode(value, { stream: true });
+
+          const thinkRegex = /<think>([\s\S]*?)<\/think>/gs;
+          let liveThoughts = "";
+          const lastThinkStart = fullResponseText.lastIndexOf("<think>");
+          const lastThinkEnd = fullResponseText.lastIndexOf("</think>");
+          if (lastThinkStart > -1 && lastThinkStart > lastThinkEnd) {
+            liveThoughts = fullResponseText.substring(lastThinkStart + 7);
+          }
+          setStreamingThinkingText(liveThoughts);
+
+          const visibleContent = fullResponseText.replace(thinkRegex, "").replace(/<think>[\s\S]*/s, "").trim();
+          const completedMatch = fullResponseText.match(thinkRegex);
+          const thinking = completedMatch ? completedMatch.map(t => t.replace(/<\/?think>/g, "").trim()).join("\n\n---\n\n") : undefined;
+
+          setMessages(prev => {
+            const newMessages = [...prev];
+            const lastMessage = newMessages[newMessages.length - 1];
+            if (lastMessage?.role === 'assistant') {
+              lastMessage.content = visibleContent;
+              lastMessage.thinking = thinking;
+            }
+            return newMessages;
+          });
+        }
       }
     } catch (e: any) {
-      setMessages(prev => {
-        const newMessages = [...prev.slice(0, -1)];
-        return [...newMessages, { role: 'assistant', content: `An error occurred: ${e.message}` }];
-      });
+      const errorMessage = `An error occurred: ${e.message}`;
+      setMessages(prev => [...prev, { role: 'assistant', content: errorMessage }]);
     } finally {
       setIsLoading(false);
       setStreamingThinkingText("");
@@ -141,7 +192,6 @@ export function ChatInterface() {
             const isLastMessage = index === messages.length - 1;
             return (
               <div key={index} className="space-y-4">
-                {/* --- HISTORIC THOUGHTS BOX (Slate Gray) --- */}
                 {message.role === 'assistant' && message.thinking && (
                   <div className="p-3 border rounded-lg bg-slate-50 dark:bg-slate-800/50">
                     <div className="flex justify-between items-center cursor-pointer" onClick={() => setHistoricExpanded(prev => ({...prev, [index]: !prev[index]}))}>
@@ -152,7 +202,6 @@ export function ChatInterface() {
                   </div>
                 )}
 
-                {/* --- LIVE "THINKING..." BOX (NOW ALSO Slate Gray) --- */}
                 {isLastMessage && isLoading && streamingThinkingText.trim().length > 0 && (
                   <div className="p-3 border rounded-lg bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700">
                     <div className="flex justify-between items-center cursor-pointer" onClick={() => setIsLiveThinkingExpanded(prev => !prev)}>
@@ -165,10 +214,9 @@ export function ChatInterface() {
                       ref={thinkingBoxRef}
                       className={cn(
                         "mt-2 rounded-md bg-slate-900 overflow-y-auto transition-all duration-300 ease-in-out",
-                        isLiveThinkingExpanded ? "max-h-96" : "h-12"
+                        isLiveThinkingExpanded ? "h-18" : "h-12"
                       )}
                     >
-                      {/* --- Text color is now slate-300 instead of blue-300 --- */}
                       <pre className="text-xs whitespace-pre-wrap font-mono p-3 text-slate-300">
                         {streamingThinkingText}
                       </pre>
@@ -176,14 +224,10 @@ export function ChatInterface() {
                   </div>
                 )}
                 
-                {/* --- MESSAGE BUBBLES --- */}
                 {message.content && (
                   <div className={cn("flex items-end gap-2", message.role === "user" ? "justify-end" : "justify-start")}>
                     {message.role === 'assistant' && <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center"><Sparkles className="h-4 w-4 text-primary"/></div>}
-                    <div className={cn(
-                      "max-w-[85%] rounded-lg px-4 py-2 shadow-sm",
-                      message.role === "user" ? "bg-primary text-primary-foreground rounded-br-none" : "bg-slate-100 dark:bg-slate-800 text-foreground rounded-bl-none"
-                    )}>
+                    <div className={cn( "max-w-[85%] rounded-lg px-4 py-2 shadow-sm", message.role === "user" ? "bg-primary text-primary-foreground rounded-br-none" : "bg-slate-100 dark:bg-slate-800 text-foreground rounded-bl-none" )}>
                       <Markdown>{message.content}</Markdown>
                     </div>
                   </div>
@@ -200,7 +244,6 @@ export function ChatInterface() {
           <div ref={messagesEndRef} />
         </CardContent>
         
-        {/* --- INPUT AREA --- */}
         <div className="border-t p-4 flex-shrink-0 bg-background/80">
           <div className="flex gap-2 items-center">
             <Input
@@ -214,9 +257,6 @@ export function ChatInterface() {
             <Button onClick={handleSendMessage} disabled={!input.trim() || !wallet.isConnected || isLoading} size="icon" className="flex-shrink-0">
               {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             </Button>
-          </div>
-          <div className="mt-3 flex justify-center">
-            <StartTradingButton />
           </div>
         </div>
       </Card>
