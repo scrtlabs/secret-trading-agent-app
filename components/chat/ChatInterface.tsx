@@ -29,7 +29,6 @@ export function ChatInterface() {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [streamingThinkingText, setStreamingThinkingText] = useState("");
-  const [isLiveThinkingExpanded, setIsLiveThinkingExpanded] = useState(true);
   const [historicExpanded, setHistoricExpanded] = useState<{ [key: number]: boolean }>({});
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -202,18 +201,15 @@ export function ChatInterface() {
 
                 {isLastMessage && isLoading && streamingThinkingText.trim().length > 0 && (
                   <div className="p-3 border rounded-lg bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700">
-                    <div className="flex justify-between items-center cursor-pointer" onClick={() => setIsLiveThinkingExpanded(prev => !prev)}>
+                    <div className="flex justify-between items-center">
                       <span className="text-sm font-semibold text-slate-500 dark:text-slate-400 animate-pulse flex items-center gap-2">
                         <BrainCircuit size={14}/>Thinking...
                       </span>
-                      {isLiveThinkingExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                     </div>
+                    {/* The div with the ref now has a fixed max-height */}
                     <div
                       ref={thinkingBoxRef}
-                      className={cn(
-                        "mt-2 rounded-md bg-slate-900 overflow-y-auto transition-all duration-300 ease-in-out",
-                        isLiveThinkingExpanded ? "h-18" : "h-12"
-                      )}
+                      className="mt-2 rounded-md bg-slate-900 overflow-y-auto max-h-[100px]" // e.g., 100px max height
                     >
                       <pre className="text-xs whitespace-pre-wrap font-mono p-3 text-slate-300">
                         {streamingThinkingText}
