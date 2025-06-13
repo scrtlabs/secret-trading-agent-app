@@ -90,6 +90,11 @@ async def login(req: LoginRequest):
 async def get_agent_address(user_id: str = Depends(get_current_user_id)):
     return {"data": agent.get_agent_secret_address()}
 
+@app.get("/api/user/trade_history")
+async def get_user_trade_history(user_id: str = Depends(get_current_user_id)):
+    history = await agent.get_trade_history(user_id)
+    return {"data": history}
+
 class KeysRequest(BaseModel): sscrtKey: str; susdcKey: str
 @app.post("/api/user/keys")
 async def set_user_keys(req: KeysRequest, user_id: str = Depends(get_current_user_id)):

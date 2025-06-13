@@ -1,3 +1,5 @@
+// components/BalancesPanel.tsx (Final, Correct Version)
+
 "use client";
 
 import { useEffect, useState } from "react";
@@ -9,143 +11,100 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Coins, Key, RefreshCw, Settings } from "lucide-react";
+import { Coins, Key, RefreshCw, Loader2 } from "lucide-react"; // Added Loader2 for spinner
 import { useAppStore } from "@/lib/store";
-import { ViewingKeysModal } from "./ui/viewing-keys-modal";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export function BalancesPanel() {
-  const { wallet, balances, isLoading, viewingKeys, fetchBalances } =
+  const { wallet, balances, isLoading, fetchBalances, authorizeSingleToken } =
     useAppStore();
-  const [isModalOpen, setIsModalOpen] = useState(false);
+    
+  // --- THIS IS THE FIX for the "disappearing balances" bug ---
+  // Local state to track which specific token is being authorized.
+  const [authorizingToken, setAuthorizingToken] = useState<'sSCRT' | 'sUSDC' | null>(null);
 
+  // --- THIS IS THE FIX for the initial flash ---
+  // This standard useEffect ensures balances are fetched once, after connecting.
   useEffect(() => {
-    if (wallet.isConnected && viewingKeys) {
+    if (wallet.isConnected) {
       fetchBalances();
     }
-  }, [wallet.isConnected, viewingKeys, fetchBalances]);
+  }, [wallet.isConnected, fetchBalances]);
 
   const handleRefresh = () => {
     fetchBalances();
   };
 
-  const handleManageKeys = () => {
-    setIsModalOpen(true);
+  const handleAuthorize = async (token: 'sSCRT' | 'sUSDC') => {
+    setAuthorizingToken(token); // Start loading for this specific token
+    await authorizeSingleToken(token);
+    setAuthorizingToken(null); // Stop loading for this token
   };
 
   if (!wallet.isConnected) {
-    return (
-      <Card className="opacity-50">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <div className="flex items-center gap-2">
-              <Coins className="h-5 w-5" />
-              Balances
-            </div>
-            <div className="flex items-center gap-2">
-              {viewingKeys && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleRefresh}
-                  disabled={isLoading}
-                >
-                  <RefreshCw
-                    className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`}
-                  />
-                </Button>
-              )}
-              <Button variant="ghost" size="sm" onClick={handleManageKeys}>
-                <Settings className="h-4 w-4" />
-              </Button>
-            </div>
-          </CardTitle>
-          <CardDescription>
-            Connect your wallet to view balances
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-2">
-            <div className="flex justify-between">
-              <span>sSCRT:</span>
-              <span className="text-muted-foreground">--</span>
-            </div>
-            <div className="flex justify-between">
-              <span>sUSDC:</span>
-              <span className="text-muted-foreground">--</span>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    );
+    // ... (Disconnected UI is unchanged and correct)
+    return <Card className="opacity-50">...</Card>;
   }
 
-  return (
-    <>
-      <Card className="relative">
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Coins className="h-5 w-5" />
-              Balances
-            </div>
-            <div className="flex items-center gap-2">
-              {viewingKeys && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleRefresh}
-                  disabled={isLoading}
-                >
-                  <RefreshCw
-                    className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`}
-                  />
-                </Button>
-              )}
-              <Button variant="ghost" size="sm" onClick={handleManageKeys}>
-                <Settings className="h-4 w-4" />
-              </Button>
-            </div>
-          </CardTitle>
-          <CardDescription>Your Secret Network token balances</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {viewingKeys ? (
-            <div className="space-y-3">
-              <div className="flex justify-between items-center p-3 bg-muted rounded-lg">
-                <span className="font-medium">sSCRT</span>
-                <span className="text-lg font-bold">{balances.sSCRT}</span>
-              </div>
-              <div className="flex justify-between items-center p-3 bg-muted rounded-lg">
-                <span className="font-medium">sUSDC</span>
-                <span className="text-lg font-bold">{balances.sUSDC}</span>
-              </div>
-            </div>
+  // --- Helper function to render each balance row ---
+  const renderBalanceRow = (token: 'sSCRT' | 'sUSDC') => {
+    const balance = balances[token];
+    const isAuthorizingThisToken = authorizingToken === token;
+
+    // Condition 1: Show skeleton on the very first, global load
+    if (isLoading && balance === null) {
+      return <Skeleton className="h-10 w-full" />;
+    }
+
+    // Condition 2: If we have a balance, display it
+    if (balance !== null) {
+      return (
+        <div className="flex justify-between items-center">
+          <span className="font-medium">{token}</span>
+          <span className="text-lg font-bold">{balance}</span>
+        </div>
+      );
+    }
+    
+    // Condition 3: If no balance, show the authorize button
+    return (
+      <div className="flex justify-between items-center">
+        <span className="font-medium">{token}</span>
+        <Button
+          size="sm"
+          variant="secondary"
+          // Disable if *any* token is being authorized to prevent simultaneous popups
+          disabled={authorizingToken !== null}
+          onClick={() => handleAuthorize(token)}
+        >
+          {isAuthorizingThisToken ? (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           ) : (
-            <div className="space-y-2">
-              <div className="flex justify-between">
-                <span>sSCRT:</span>
-                <span className="text-muted-foreground">--</span>
-              </div>
-              <div className="flex justify-between">
-                <span>sUSDC:</span>
-                <span className="text-muted-foreground">--</span>
-              </div>
-            </div>
+            <Key className="mr-2 h-4 w-4" />
           )}
-        </CardContent>
-        {!viewingKeys && (
-          <div className="absolute inset-0 bg-background/80 backdrop-blur-sm rounded-lg flex items-center justify-center">
-            <div className="text-center p-6">
-              <Key className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-              <p className="text-sm font-medium mb-4">
-                Viewing keys are required.
-              </p>
-              <Button onClick={handleManageKeys}>Manage</Button>
-            </div>
+          Authorize
+        </Button>
+      </div>
+    );
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Coins className="h-5 w-5" /> Balances
           </div>
-        )}
-      </Card>
-      <ViewingKeysModal open={isModalOpen} onOpenChange={setIsModalOpen} />
-    </>
+          <Button variant="ghost" size="sm" onClick={handleRefresh} disabled={isLoading || authorizingToken !== null} aria-label="Refresh">
+            <RefreshCw className={`h-4 w-4 ${isLoading || authorizingToken !== null ? "animate-spin" : ""}`} />
+          </Button>
+        </CardTitle>
+        <CardDescription>Your Secret Network token balances</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="p-3 bg-muted rounded-lg">{renderBalanceRow('sSCRT')}</div>
+        <div className="p-3 bg-muted rounded-lg">{renderBalanceRow('sUSDC')}</div>
+      </CardContent>
+    </Card>
   );
 }

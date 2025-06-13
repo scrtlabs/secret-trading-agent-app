@@ -13,8 +13,8 @@ export interface ChatMessage {
 }
 
 export interface Balance {
-  sSCRT: string;
-  sUSDC: string;
+  sSCRT: string | null;
+  sUSDC: string | null;
 }
 
 export interface WalletState {

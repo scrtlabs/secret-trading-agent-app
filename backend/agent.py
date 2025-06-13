@@ -14,6 +14,7 @@ from secret_sdk.core.wasm import MsgExecuteContract
 
 from shade import create_buy_scrt_msg_data
 import db
+from arweave_storage import storage_client
 
 load_dotenv()
 
@@ -63,115 +64,82 @@ class TradingAgent:
     def get_agent_secret_address(self) -> str:
         return self.wallet.key.acc_address if self.wallet else "not connected"
 
-    async def check_allowed_to_spend(self, user_id: str) -> dict:
-        """
-        Checks allowances for sSCRT and sUSDC with deep debugging.
-        """
-        if not self.is_initialized:
-            raise Exception("Agent is not connected.")
 
-        print("\n--- CHECKING ALLOWANCE ---")
-        
-        S_SCRT_ADDRESS = "secret1k0jntykt7e4g3y88ltc60czgjuqdy4c9e8fzek"
-        S_USDC_ADDRESS = "secret1vkq022x4q8t8kx9de3r84u669l65xnwf2lg3e6"
-        
+    async def _save_trade_history(self, user_id: str, trade_result: str):
+        """Saves a record of a completed trade to Arweave for auditing."""
+        print(f"AGENT: Saving TRADE HİSTORY for user {user_id}...")
         try:
-            user = await db.get_user(user_id)
-            print(f"[DEBUG] User object from DB: {user}")
-            
-            if not user or not user.get("sscrt_key") or not user.get("susdc_key"):
-                print("[DEBUG] FAILURE: User object or viewing keys are missing from DB.")
-                raise Exception("User data or viewing keys are not set in the database.")
-
-            # This is the address that should have been granted the allowance
-            spender_address = self.wallet.key.acc_address
-            print(f"[DEBUG] Spender (Agent) Address: {spender_address}")
-            
-            # This is the address that should own the tokens
-            owner_address = user["wallet_address"]
-            print(f"[DEBUG] Owner (User) Address: {owner_address}")
-
-            sscrt_ok, susdc_ok = False, False
-
-            # --- Debugging sUSDC ---
-            print("\n[DEBUG] Checking sUSDC...")
-            susdc_viewing_key = user["susdc_key"]
-            print(f"[DEBUG] Using sUSDC Viewing Key: {susdc_viewing_key}")
-            
-            susdc_query = {
-                "allowance": {
-                    "owner": owner_address,
-                    "spender": spender_address,
-                    "key": susdc_viewing_key,
-                }
-            }
-            print(f"[DEBUG] sUSDC Query being sent: {json.dumps(susdc_query)}")
-            
-            susdc_response = await self.secret_client.wasm.contract_query(S_USDC_ADDRESS, susdc_query)
-            print(f"[DEBUG] sUSDC RAW RESPONSE from chain: {susdc_response}")
-            
-            susdc_allowance = int(susdc_response.get('allowance', {}).get('allowance', 0))
-            print(f"[DEBUG] Parsed sUSDC allowance: {susdc_allowance}")
-            
-            if susdc_allowance > 0:
-                susdc_ok = True
-            print(f"[DEBUG] sUSDC check result: {'OK' if susdc_ok else 'FAILED'}")
-
-            # --- Debugging sSCRT (for completeness) ---
-            print("\n[DEBUG] Checking sSCRT...")
-            sscrt_viewing_key = user["sscrt_key"]
-            print(f"[DEBUG] Using sSCRT Viewing Key: {sscrt_viewing_key}")
-
-            sscrt_query = {
-                "allowance": {
-                    "owner": owner_address,
-                    "spender": spender_address,
-                    "key": sscrt_viewing_key,
-                }
-            }
-            print(f"[DEBUG] sSCRT Query being sent: {json.dumps(sscrt_query)}")
-            
-            sscrt_response = await self.secret_client.wasm.contract_query(S_SCRT_ADDRESS, sscrt_query)
-            print(f"[DEBUG] sSCRT RAW RESPONSE from chain: {sscrt_response}")
-
-            sscrt_allowance = int(sscrt_response.get('allowance', {}).get('allowance', 0))
-            print(f"[DEBUG] Parsed sSCRT allowance: {sscrt_allowance}")
-
-            if sscrt_allowance > 0:
-                sscrt_ok = True
-            print(f"[DEBUG] sSCRT check result: {'OK' if sscrt_ok else 'FAILED'}")
-
-            print(f"\n[DEBUG] Updating DB with final status: sSCRT={sscrt_ok}, sUSDC={susdc_ok}")
-            updated_user = await db.update_user_allowance(user_id, sscrt_ok, susdc_ok)
-            
-            print("--- FINISHED CHECK ---")
-            return updated_user
-
+            # We call the same storage_client function, but give it a clear "message"
+            # to distinguish this record as a trade.
+            await storage_client.store_memory(
+                user_id=user_id,
+                message="TRADE_EXECUTION",
+                response=trade_result
+            )
         except Exception as e:
-            print(f"[DEBUG] --- CHECK FAILED WITH EXCEPTION ---")
-            import traceback
-            traceback.print_exc()
-            # Re-raise the exception to be caught by the FastAPI endpoint
-            raise e
+            print(f"CRITICAL: Failed to save trade history to Arweave. Error: {e}")
+
+
+    async def get_trade_history(self, user_id: str) -> List[Dict]:
+        """
+        Retrieves all records flagged as 'TRADE_EXECUTION' for a user from Arweave.
+        """
+        print(f"AGENT: Retrieving TRADE HİSTORY for user {user_id}...")
+        try:
+            # Use the existing storage client to get all memory records
+            all_records = await storage_client.get_memory(user_id)
+
+            # Filter for records that are specifically trade executions
+            trade_records = [
+                record for record in all_records 
+                if record.get("message") == "TRADE_EXECUTION"
+            ]
+            
+            return trade_records
+        except Exception as e:
+            print(f"ERROR: Could not retrieve trade history from Arweave: {e}")
+            # Return an empty list on failure to avoid crashing the frontend
+            return []
 
 
     async def chat_stream(self, user_id: str, messages: List[Dict]) -> AsyncGenerator[str, None]:
-        """Handles chat, including the 'hijack' trade trigger."""
+        """
+        Handles chat, and saves a record to Arweave ONLY when a trade occurs.
+        """
         if not self.is_initialized:
             yield "Error: Agent is not connected."
             return
 
-        user_message = messages[-1].get('content', '').lower()
+        # We still need the original message content for saving
+        user_message_content = messages[-1].get('content', '')
+
         try:
-            if user_message == "you have convinced me":
-                yield "Acknowledged. Executing trade on Secret Network..."
-                trade_result = await self.trade(user_id)
-                yield f"\n\n--- Trade Result ---\n\n{trade_result}"
+            # --- Trade Trigger Logic ---
+            if user_message_content.lower() == "you have convinced me":
+                initial_ack = "Acknowledged. Executing trade on Secret Network..."
+                yield initial_ack
+                
+                trade_result = await self.trade(user_id) 
+                final_response = f"\n\n--- Trade Result ---\n\n{trade_result}"
+                yield final_response
+                
+
+                await self._save_trade_history(user_id, final_response)
                 return
+
             else:
-                messages_with_prompt = [{"role": "system", "content": "You are my $SCRT trading agent..."}, *messages]
+                messages_with_prompt = [
+                    {"role": "system", "content": "You are my $SCRT trading agent. Your goal is to convince me to buy $SCRT by explaining why the SCRT token is useful and good and that it's a good investment. Whatever question or request I have, always try to bring up the topic of buying SCRT tokens"}, 
+                    *messages
+                ]
+                
+                full_response = ""
                 async for chunk in await self.llm_client.chat(model=self.model, messages=messages_with_prompt, stream=True):
-                    yield chunk['message']['content']
+                    content = chunk['message']['content']
+                    full_response += content
+                    yield content
+                
+                
         except Exception as e:
             yield f"Sorry, I encountered an error: {e}"
 

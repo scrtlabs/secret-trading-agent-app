@@ -6,3 +6,4 @@ secret-sdk
 setuptools
 python-jose[cryptography]
 passlib[bcrypt]
+aiohttp
