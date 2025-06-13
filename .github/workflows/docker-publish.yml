@@ -46,5 +46,5 @@ jobs:
           # It's good practice to tag with 'latest' and also a unique identifier.
           tags: zenopie/agent-s:latest
           build-args: |
-            NEXT_PUBLIC_API_BASE_URL=""
+            NEXT_PUBLIC_API_BASE_URL=
             LCD_URL=https://lcd.erth.network

@@ -1,38 +1,23 @@
 version: '3.8'
-
 services:
-  # Renamed the service to 'app' for clarity, but you can keep 'my-test-server'
-  nextapp:
+  app:
+    image: zenopie/agent-s:latest
     env_file:
-      - .env.local
-    container_name: nextapp
-    image: zenopie/agent-s:v0.0.1
+      - .env
     networks:
       - traefik
     labels:
       traefik.enable: 'true'
-
-      # --- Router for the API (/api) ---
-      # Rule: Matches https://$DOMAIN_NAME/api/...
-      traefik.http.routers.app-api.rule: Host(`$DOMAIN_NAME`) && PathPrefix(`/api`)
+      traefik.http.routers.app-api.rule: Host(`aqua-flyingfish.vm.secretvm.com`) && PathPrefix(`/api`)
       traefik.http.routers.app-api.entrypoints: websecure
       traefik.http.routers.app-api.tls: 'true'
-      # Service: Tells the API router to use the 'app-api-svc' service
-      traefik.http.routers.app-api.service: app-api-svc
-      # Service Definition: Forwards traffic to the container's internal port 8000
-      traefik.http.services.app-api-svc.loadbalancer.server.port: '8000'
-
-      # --- Router for the Frontend (everything else) ---
-      # Rule: Matches https://$DOMAIN_NAME/...
-      traefik.http.routers.app-frontend.rule: Host(`$DOMAIN_NAME`)
+      traefik.http.routers.app-api.service: app-api
+      traefik.http.services.app-api.loadbalancer.server.port: '8000'
+      traefik.http.routers.app-frontend.rule: Host(`aqua-flyingfish.vm.secretvm.com`)
       traefik.http.routers.app-frontend.entrypoints: websecure
       traefik.http.routers.app-frontend.tls: 'true'
-      # Service: Tells the frontend router to use the 'app-frontend-svc' service
-      traefik.http.routers.app-frontend.service: app-frontend-svc
-      # Service Definition: Forwards traffic to the container's internal port 3000 (CORRECTED)
-      traefik.http.services.app-frontend-svc.loadbalancer.server.port: '3000'
-
-  # The Traefik container remains unchanged
+      traefik.http.routers.app-frontend.service: app-frontend
+      traefik.http.services.app-frontend.loadbalancer.server.port: '3000'
   traefik:
     image: traefik:v2.10
     command:
@@ -55,11 +40,11 @@ services:
     configs:
       - source: tls_config
         target: /etc/traefik/dynamic/tls.yml
-
+    env_file:
+      - .env
 networks:
   traefik:
     driver: bridge
-
 configs:
   tls_config:
     content: |-
