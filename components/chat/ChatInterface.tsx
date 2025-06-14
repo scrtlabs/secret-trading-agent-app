@@ -205,7 +205,7 @@ export function ChatInterface() {
               <p className="max-w-md">Hi! I'm Aqua, your friendly crypto navigation partner.
                 <br/>Today I'm trying to convince you to trade sUSDC for sSCRT.
                 <br/>Ask me questions and when I have convinced you, let me know by typing "you have convinced me"
-                <br/>I hope to help people navigate the crypto world with safety, simplicity, and soverignty!</p>
+                <br/>I hope to help people navigate the crypto world with safety, simplicity, and sovereignty!</p>
           </div>
         )}
         
