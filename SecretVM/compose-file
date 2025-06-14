@@ -1,7 +1,7 @@
 version: '3.8'
 services:
   app:
-    image: zenopie/agent-s:latest
+    image: zenopie/aqua-chat:latest
     env_file:
       - .env
     networks:
