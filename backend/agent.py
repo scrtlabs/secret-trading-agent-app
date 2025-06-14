@@ -117,7 +117,7 @@ class TradingAgent:
             if user_message_content.lower() == "you have convinced me":
                 yield json.dumps({
                     "action": "execute_trade",
-                    "message": "Great! I've prepared the transaction for you. Please review and sign it in your wallet to execute the trade for 3 sUSDC.",
+                    "message": "Great! I've prepared the transaction for you. Please review and sign it in your wallet to execute the trade for .3 sUSDC.",
                     "trade_args": self.prepare_trade_transaction(user_id)
                 })
                 return
