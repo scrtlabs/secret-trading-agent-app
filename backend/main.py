@@ -28,11 +28,6 @@ auth_scheme = HTTPBearer()
 
 # --- CHANGE 2: Replace your get_current_user_id function with this one ---
 async def get_current_user_id(request: Request, credentials: HTTPAuthorizationCredentials = Depends(auth_scheme)):
-    # --- DEBUGGING PRINTS to see what the backend is receiving ---
-    print("--- AUTHENTICATION CHECK ---")
-    print("INCOMING REQUEST HEADERS:", request.headers)
-    print("EXTRACTED CREDENTIALS FROM HEADER:", credentials)
-    # --- END OF DEBUGGING PRINTS ---
 
     if not credentials:
         print("AUTH FAILED: No credentials were found in the header.")
@@ -94,6 +89,29 @@ async def get_agent_address(user_id: str = Depends(get_current_user_id)):
 async def get_user_trade_history(user_id: str = Depends(get_current_user_id)):
     history = await agent.get_trade_history(user_id)
     return {"data": history}
+
+class LogTradeRequest(BaseModel):
+    trade_result: str
+
+@app.post("/api/log_trade")
+async def log_trade(
+    req: LogTradeRequest,
+    user_id: str = Depends(get_current_user_id) # Protect the endpoint
+):
+    """
+    Receives a trade result (success or fail) from the frontend AFTER the 
+    transaction has been attempted, and securely logs it to Arweave.
+    """
+    if not req.trade_result:
+        raise HTTPException(status_code=400, detail="trade_result cannot be empty.")
+
+    try:
+        # Use the agent's method to handle Arweave storage
+        await agent._save_trade_history(user_id, req.trade_result)
+        return {"status": "ok", "message": "Trade result logged successfully."}
+    except Exception as e:
+        print(f"ERROR: Failed to log trade for user {user_id}. Error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to log trade result.")
 
 class KeysRequest(BaseModel): sscrtKey: str; susdcKey: str
 @app.post("/api/user/keys")

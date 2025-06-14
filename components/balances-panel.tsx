@@ -1,30 +1,17 @@
-// components/BalancesPanel.tsx (Final, Correct Version)
+// components/BalancesPanel.tsx
 
 "use client";
 
 import { useEffect, useState } from "react";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Coins, Key, RefreshCw, Loader2 } from "lucide-react"; // Added Loader2 for spinner
+import { Coins, Key, RefreshCw, Loader2 } from "lucide-react";
 import { useAppStore } from "@/lib/store";
-import { Skeleton } from "@/components/ui/skeleton";
 
 export function BalancesPanel() {
-  const { wallet, balances, isLoading, fetchBalances, authorizeSingleToken } =
-    useAppStore();
-    
-  // --- THIS IS THE FIX for the "disappearing balances" bug ---
-  // Local state to track which specific token is being authorized.
+  const { wallet, balances, isLoading, fetchBalances, authorizeSingleToken } = useAppStore();
   const [authorizingToken, setAuthorizingToken] = useState<'sSCRT' | 'sUSDC' | null>(null);
 
-  // --- THIS IS THE FIX for the initial flash ---
-  // This standard useEffect ensures balances are fetched once, after connecting.
   useEffect(() => {
     if (wallet.isConnected) {
       fetchBalances();
@@ -36,62 +23,69 @@ export function BalancesPanel() {
   };
 
   const handleAuthorize = async (token: 'sSCRT' | 'sUSDC') => {
-    setAuthorizingToken(token); // Start loading for this specific token
+    setAuthorizingToken(token);
     await authorizeSingleToken(token);
-    setAuthorizingToken(null); // Stop loading for this token
+    setAuthorizingToken(null);
   };
+  
+  const cardClasses = "bg-white rounded-[20px] shadow-[0_2px_10px_rgba(0,0,0,0.1)]";
 
   if (!wallet.isConnected) {
-    // ... (Disconnected UI is unchanged and correct)
-    return <Card className="opacity-50">...</Card>;
+    return (
+      <Card className={`${cardClasses} opacity-50`}>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-gray-800">
+            <Coins className="h-5 w-5" /> Balances
+          </CardTitle>
+          <CardDescription>Connect wallet to view balances</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="h-10 p-3 bg-gray-100 rounded-lg" />
+          <div className="h-10 p-3 bg-gray-100 rounded-lg" />
+        </CardContent>
+      </Card>
+    );
   }
 
-  // --- Helper function to render each balance row ---
   const renderBalanceRow = (token: 'sSCRT' | 'sUSDC') => {
     const balance = balances[token];
     const isAuthorizingThisToken = authorizingToken === token;
 
-    // Condition 1: Show skeleton on the very first, global load
-    if (isLoading && balance === null) {
-      return <Skeleton className="h-10 w-full" />;
-    }
-
-    // Condition 2: If we have a balance, display it
-    if (balance !== null) {
-      return (
-        <div className="flex justify-between items-center">
-          <span className="font-medium">{token}</span>
-          <span className="text-lg font-bold">{balance}</span>
-        </div>
-      );
-    }
-    
-    // Condition 3: If no balance, show the authorize button
     return (
-      <div className="flex justify-between items-center">
-        <span className="font-medium">{token}</span>
-        <Button
-          size="sm"
-          variant="secondary"
-          // Disable if *any* token is being authorized to prevent simultaneous popups
-          disabled={authorizingToken !== null}
-          onClick={() => handleAuthorize(token)}
-        >
-          {isAuthorizingThisToken ? (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          ) : (
-            <Key className="mr-2 h-4 w-4" />
-          )}
-          Authorize
-        </Button>
+      <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+        <span className="font-medium text-gray-700">{token}</span>
+        
+        {/* --- THIS LOGIC FIXES THE UI FLASH --- */}
+        {(isLoading && balance === null) ? (
+          // 1. Initial loading state: Show a placeholder
+          <span className="text-lg font-bold text-gray-400">--</span>
+        ) : balance !== null ? (
+          // 2. Balance is available: Show the balance
+          <span className="text-lg font-bold text-gray-800">{balance}</span>
+        ) : (
+          // 3. Needs authorization: Show the button
+          <Button
+            size="sm"
+            disabled={authorizingToken !== null}
+            onClick={() => handleAuthorize(token)}
+            className="bg-[#4caf50] text-white hover:bg-[#45a049] disabled:bg-[#4caf50] disabled:opacity-70"
+          >
+            {isAuthorizingThisToken ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Key className="mr-2 h-4 w-4" />
+            )}
+            Authorize
+          </Button>
+        )}
       </div>
     );
   };
 
   return (
-    <Card>
+    <Card className={cardClasses}>
       <CardHeader>
-        <CardTitle className="flex items-center justify-between">
+        <CardTitle className="flex items-center justify-between text-gray-800">
           <div className="flex items-center gap-2">
             <Coins className="h-5 w-5" /> Balances
           </div>
@@ -102,8 +96,8 @@ export function BalancesPanel() {
         <CardDescription>Your Secret Network token balances</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
-        <div className="p-3 bg-muted rounded-lg">{renderBalanceRow('sSCRT')}</div>
-        <div className="p-3 bg-muted rounded-lg">{renderBalanceRow('sUSDC')}</div>
+        {renderBalanceRow('sSCRT')}
+        {renderBalanceRow('sUSDC')}
       </CardContent>
     </Card>
   );

@@ -8,12 +8,12 @@ services:
       - traefik
     labels:
       traefik.enable: 'true'
-      traefik.http.routers.app-api.rule: Host(`aqua-flyingfish.vm.secretvm.com`) && PathPrefix(`/api`)
+      traefik.http.routers.app-api.rule: Host(`$DOMAIN_NAME`) && PathPrefix(`/api`)
       traefik.http.routers.app-api.entrypoints: websecure
       traefik.http.routers.app-api.tls: 'true'
       traefik.http.routers.app-api.service: app-api
       traefik.http.services.app-api.loadbalancer.server.port: '8000'
-      traefik.http.routers.app-frontend.rule: Host(`aqua-flyingfish.vm.secretvm.com`)
+      traefik.http.routers.app-frontend.rule: Host(`$DOMAIN_NAME`)
       traefik.http.routers.app-frontend.entrypoints: websecure
       traefik.http.routers.app-frontend.tls: 'true'
       traefik.http.routers.app-frontend.service: app-frontend
@@ -40,8 +40,6 @@ services:
     configs:
       - source: tls_config
         target: /etc/traefik/dynamic/tls.yml
-    env_file:
-      - .env
 networks:
   traefik:
     driver: bridge

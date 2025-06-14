@@ -67,15 +67,14 @@ class TradingAgent:
 
     async def _save_trade_history(self, user_id: str, trade_result: str):
         """Saves a record of a completed trade to Arweave for auditing."""
-        print(f"AGENT: Saving TRADE HİSTORY for user {user_id}...")
+        print(f"AGENT: Saving TRADE HISTORY for user {user_id}...")
         try:
-            # We call the same storage_client function, but give it a clear "message"
-            # to distinguish this record as a trade.
             await storage_client.store_memory(
                 user_id=user_id,
                 message="TRADE_EXECUTION",
                 response=trade_result
             )
+            print(f"AGENT: Successfully saved trade history to Arweave for user {user_id}.")
         except Exception as e:
             print(f"CRITICAL: Failed to save trade history to Arweave. Error: {e}")
 
@@ -116,15 +115,11 @@ class TradingAgent:
         try:
             # --- Trade Trigger Logic ---
             if user_message_content.lower() == "you have convinced me":
-                initial_ack = "Acknowledged. Executing trade on Secret Network..."
-                yield initial_ack
-                
-                trade_result = await self.trade(user_id) 
-                final_response = f"\n\n--- Trade Result ---\n\n{trade_result}"
-                yield final_response
-                
-
-                await self._save_trade_history(user_id, final_response)
+                yield json.dumps({
+                    "action": "execute_trade",
+                    "message": "Great! I've prepared the transaction for you. Please review and sign it in your wallet to execute the trade for 3 sUSDC.",
+                    "trade_args": self.prepare_trade_transaction(user_id)
+                })
                 return
 
             else:

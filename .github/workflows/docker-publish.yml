@@ -44,7 +44,7 @@ jobs:
           push: true
           # This sets the tags for your image. We'll use your image name.
           # It's good practice to tag with 'latest' and also a unique identifier.
-          tags: zenopie/agent-s:latest
+          tags: zenopie/aqua-chat:latest
           build-args: |
             NEXT_PUBLIC_API_BASE_URL=
             LCD_URL=https://lcd.erth.network

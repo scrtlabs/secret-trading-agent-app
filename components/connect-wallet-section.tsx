@@ -1,33 +1,20 @@
-// components/ConnectWalletSection.tsx (Final, Cleaned Version)
+// components/ConnectWalletSection.tsx
 
 "use client";
 
 import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Wallet, WalletIcon as WalletX } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { truncateAddress } from "@/lib/utils";
 
 export function ConnectWalletSection() {
-  const {
-    wallet,
-    isLoading,
-    connectWallet,
-    disconnectWallet,
-    getAutoConnect,
-    user, // We still need `user` to know when the connection is fully complete
-  } = useAppStore();
+  const { wallet, isLoading, connectWallet, disconnectWallet, getAutoConnect, user } = useAppStore();
 
   useEffect(() => {
     if (getAutoConnect()) {
-      // connectWallet(); // Keep commented for manual testing, or re-enable
+      // connectWallet();
     }
   }, []);
 
@@ -42,13 +29,14 @@ export function ConnectWalletSection() {
   const handleDisconnect = () => {
     disconnectWallet();
   };
+  
+  const cardClasses = "bg-white rounded-[20px] shadow-[0_2px_10px_rgba(0,0,0,0.1)]";
 
-  // --- The UI is now much simpler ---
   if (wallet.isConnected && wallet.secretAddress && user) {
     return (
-      <Card>
+      <Card className={cardClasses}>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+          <CardTitle className="flex items-center gap-2 text-gray-800">
             <Wallet className="h-5 w-5 text-green-500" />
             Wallet Connected
           </CardTitle>
@@ -57,12 +45,7 @@ export function ConnectWalletSection() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {/* The "Authorize Spending" button and its logic are now gone. */}
-          <Button
-            onClick={handleDisconnect}
-            variant="outline"
-            className="w-full"
-          >
+          <Button onClick={handleDisconnect} variant="outline" className="w-full">
             <WalletX className="h-4 w-4 mr-2" />
             Disconnect Wallet
           </Button>
@@ -71,11 +54,10 @@ export function ConnectWalletSection() {
     );
   }
 
-  // This part for the disconnected state is correct and remains the same.
   return (
-    <Card>
+    <Card className={cardClasses}>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
+        <CardTitle className="flex items-center gap-2 text-gray-800">
           <Wallet className="h-5 w-5" />
           Connect Wallet
         </CardTitle>
@@ -84,7 +66,11 @@ export function ConnectWalletSection() {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <Button onClick={handleConnect} disabled={isLoading} className="w-full">
+        <Button 
+          onClick={handleConnect} 
+          disabled={isLoading} 
+          className="w-full bg-[#4caf50] text-white hover:bg-[#45a049] disabled:bg-[#4caf50] disabled:opacity-70"
+        >
           {isLoading ? "Connecting..." : "Connect Wallet"}
         </Button>
       </CardContent>

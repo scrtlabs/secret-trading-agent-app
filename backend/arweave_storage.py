@@ -91,25 +91,42 @@ class ArweaveStorageClient:
 
     async def get_memory(self, user_id: str) -> List[Dict]:
         """
-        Retrieves, downloads, and sorts all memory/history for a given user_id from the bucket.
+        Retrieves and parses all completed trade history files for a user from the bucket.
         """
         print(f"ARWEAVE: Retrieving trade history for user {user_id}...")
         async with aiohttp.ClientSession() as session:
             try:
                 # --- Step 1: List all content in the bucket ---
                 async with session.get(f"{self.base_url}/content", headers=self.headers) as resp:
-                    resp.raise_for_status()
+                    if not resp.ok:
+                        print(f"APPILLON API ERROR: Status {resp.status}, Body: {await resp.text()}")
+                        return []
                     bucket_content = await resp.json()
                 
-                # --- Step 2: Filter files based on filename convention ---
-                # NOTE: This is less robust than tags, but it's what the direct API provides.
+                items_from_api = bucket_content.get('data', {}).get('items', [])
+                if not items_from_api:
+                    print("ARWEAVE: No items found in the bucket.")
+                    return []
+                
+                print(f"ARWEAVE: Found {len(items_from_api)} total items in the bucket. Now filtering...")
+
+                # --- Step 2: Filter for the user's files that are CONFIRMED UPLOADED ---
+                #
+                # THIS IS THE FIX: We add two conditions:
+                # 1. `item.get('fileStatus') == 4` ensures the file is fully uploaded.
+                # 2. `'link' in item` is a safeguard to ensure the download link exists.
+                # This prevents the KeyError when a file is still pending (fileStatus: 2).
+                #
                 user_files = [
-                    item for item in bucket_content['data']['items']
-                    if item['name'].startswith(f"trade-{user_id}-") and item['type'] == 1 # Type 1 is FILE
+                    item for item in items_from_api
+                    if (item.get('name', '').startswith(f"trade-{user_id}-") and
+                        item.get('type') == 2 and
+                        item.get('fileStatus') == 4 and # Check for "Uploaded" status
+                        'link' in item)                 # Ensure the link key exists
                 ]
                 
                 if not user_files:
-                    print("ARWEAVE: No trade history found on Arweave for this user.")
+                    print(f"ARWEAVE: No completed trade history files found for user {user_id}.")
                     return []
 
                 # --- Step 3: Concurrently download and parse all relevant files ---
@@ -124,6 +141,12 @@ class ArweaveStorageClient:
             
             except aiohttp.ClientError as e:
                 print(f"ARWEAVE ERROR: Failed to retrieve history via API. Error: {e}")
+                return []
+            except Exception as e:
+                # Catching the KeyError here for better logging, though the fix should prevent it.
+                print(f"ARWEAVE ERROR: An unexpected error occurred: {e}")
+                import traceback
+                traceback.print_exc()
                 return []
 
 # Create a single, shared instance that can be imported and used throughout the application
