@@ -5,10 +5,8 @@ name: Build and Push Docker Image
 # It will run every time you push to the 'main' branch.
 on:
   push:
-    branches:
-      - "main"
-      - "fix-viewing-keys"
-
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
 
 # This section defines the jobs to be run.
 jobs:
@@ -18,6 +16,14 @@ jobs:
     # This solves your slow build problem!
     runs-on: ubuntu-latest
 
+    permissions:
+      contents: read
+      packages: write
+
+    env:
+      REGISTRY: ghcr.io
+      IMAGE_NAME: scrtlabs/secret-trading-agent-app
+
     # These are the individual steps the job will perform in order.
     steps:
       # Step 1: Check out your repository's code
@@ -25,18 +31,23 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Get the version
+        id: get_version
+        run: echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}
+
       # Step 2: Log in to Docker Hub
       # This uses the secure secrets you created earlier.
-      - name: Log in to Docker Hub
+      - name: Login to the Container registry
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       # Step 3: Build the Docker image and push it to Docker Hub
       # This is the main event. It runs the 'docker build' and 'docker push' commands.
       - name: Build and push Docker image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v4
         with:
           # The context is the current directory, where your Dockerfile is.
           context: .
@@ -44,7 +55,7 @@ jobs:
           push: true
           # This sets the tags for your image. We'll use your image name.
           # It's good practice to tag with 'latest' and also a unique identifier.
-          tags: zenopie/aqua-chat:latest
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.get_version.outputs.VERSION }}
           build-args: |
             NEXT_PUBLIC_API_BASE_URL=
             LCD_URL=https://lcd.erth.network
