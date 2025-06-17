@@ -1,61 +1,95 @@
-# A simple, human-readable name for your action
 name: Build and Push Docker Image
 
-# This section defines the trigger for the action.
-# It will run every time you push to the 'main' branch.
 on:
   push:
-    tags:
-      - "v[0-9]+.[0-9]+.[0-9]+"
+    tags: "v[0-9]+.[0-9]+.[0-9]+"
 
-# This section defines the jobs to be run.
 jobs:
-  # We have one job, which we'll call 'build-and-push'
   build-and-push:
-    # This tells GitHub to run our job on a standard, fast Ubuntu (linux/amd64) server.
-    # This solves your slow build problem!
     runs-on: ubuntu-latest
 
-    permissions:
-      contents: read
-      packages: write
-
-    env:
-      REGISTRY: ghcr.io
-      IMAGE_NAME: scrtlabs/secret-trading-agent-app
-
-    # These are the individual steps the job will perform in order.
     steps:
-      # Step 1: Check out your repository's code
-      # This downloads your code (including your Dockerfile) onto the server.
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - name: Checkout repo
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
 
       - name: Get the version
         id: get_version
-        run: echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
-      # Step 2: Log in to Docker Hub
-      # This uses the secure secrets you created earlier.
-      - name: Login to the Container registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set lowercase repository name
+        id: set_repo
+        run: echo "REPO_NAME=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
 
-      # Step 3: Build the Docker image and push it to Docker Hub
-      # This is the main event. It runs the 'docker build' and 'docker push' commands.
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v4
-        with:
-          # The context is the current directory, where your Dockerfile is.
-          context: .
-          # This tells the action to actually push after building.
-          push: true
-          # This sets the tags for your image. We'll use your image name.
-          # It's good practice to tag with 'latest' and also a unique identifier.
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.get_version.outputs.VERSION }}
-          build-args: |
-            NEXT_PUBLIC_API_BASE_URL=
-            LCD_URL=https://lcd.erth.network
+      - name: Log in to GitHub Container Registry
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Build Docker image
+        id: build
+        run: |
+          docker build -t ghcr.io/${{ steps.set_repo.outputs.REPO_NAME }}:latest .
+
+
+      - name: Push Docker image
+        id: push
+        run: |
+          # Push latest first
+          docker push ghcr.io/${{ steps.set_repo.outputs.REPO_NAME }}:latest
+          # Tag with version and push
+          docker tag ghcr.io/${{ steps.set_repo.outputs.REPO_NAME }}:latest ghcr.io/${{ steps.set_repo.outputs.REPO_NAME }}:${{ steps.get_version.outputs.VERSION }}
+          docker push ghcr.io/${{ steps.set_repo.outputs.REPO_NAME }}:${{ steps.get_version.outputs.VERSION }}
+
+          # Get the manifest digest after pushing
+          MANIFEST_DIGEST=$(docker inspect ghcr.io/${{ steps.set_repo.outputs.REPO_NAME }}:latest --format='{{index .RepoDigests 0}}' | cut -d'@' -f2 | cut -d':' -f2)
+          echo "IMAGE_HASH=${MANIFEST_DIGEST}" >> $GITHUB_OUTPUT          
+
+      - name: Generate docker-compose-secretvm.yaml
+        run: |
+          cat > docker-compose-secretvm.yaml << EOL
+          # Release: https://github.com/${{ github.repository }}/releases/tag/${{ steps.get_version.outputs.VERSION }}
+          # Workflow URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          # Commit: https://github.com/${{ github.repository }}/commit/${{ github.sha }}
+          version: '3'
+          services:
+            app:
+              image: ghcr.io/${{ steps.set_repo.outputs.REPO_NAME }}@sha256:${{ steps.push.outputs.IMAGE_HASH }}
+              ports:
+                - '3000:80'
+          EOL
+
+      - name: Commit docker-compose-secretvm.yaml
+        run: |
+          # Fetch all branches
+          git fetch origin
+          
+          # Get the branch where the workflow file was committed
+          BRANCH_NAME="${{ github.event.repository.default_branch }}"
+          
+          # Checkout the branch
+          git checkout $BRANCH_NAME
+          
+          # Configure git
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          
+          # Add and commit changes
+          git add docker-compose-secretvm.yaml
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Update docker-compose-secretvm.yaml for version ${{ steps.get_version.outputs.VERSION }}"
+            git push origin $BRANCH_NAME
+          fi
+
+      - name: Output Image URL
+        run: |
+          echo "IMAGE_URL=ghcr.io/${{ steps.set_repo.outputs.REPO_NAME }}:${{ steps.build.outputs.IMAGE_HASH }}" >> $GITHUB_OUTPUT
+          echo "WORKFLOW_ID=${{ github.run_id }}" >> $GITHUB_OUTPUT
+
+      - name: Notify Workflow Status
+        if: always()
+        run: |
+          echo "Workflow Status: ${{ job.status }}"
+          echo "Image URL: ghcr.io/${{ steps.set_repo.outputs.REPO_NAME }}:${{ steps.build.outputs.IMAGE_HASH }}"
+          echo "Workflow ID: ${{ github.run_id }}"
