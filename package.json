@@ -47,7 +47,7 @@
     "@supabase/supabase-js": "^2.49.9",
     "arweave-storage-sdk": "^1.4.6",
     "autoprefixer": "^10.4.20",
-    "axios": "^1.9.0",
+    "axios": "^1.12.0",
     "chain-registry": "^1.69.229",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
