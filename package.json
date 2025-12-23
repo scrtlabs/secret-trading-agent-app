@@ -15,7 +15,7 @@
     "@cosmjs/encoding": "^0.33.1",
     "@cosmjs/stargate": "v0.28.2",
     "@hookform/resolvers": "^3.9.1",
-    "@langchain/core": "^0.3.57",
+    "@langchain/core": "^0.3.80",
     "@next/env": "^15.3.3",
     "@radix-ui/react-accordion": "1.2.2",
     "@radix-ui/react-alert-dialog": "1.1.4",
